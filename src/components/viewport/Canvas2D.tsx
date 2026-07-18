@@ -102,7 +102,8 @@ interface CameraState {
 interface DrawState {
   pendingStart: Point | null;
   cursorWorld: Point | null;
-  snappedEndpoint: boolean;
+  /** True whenever the cursor point is magnetized onto another wall — a corner or its face/centerline — same trigger as the measurement tool's magnet ring. */
+  snappedToWall: boolean;
   lengthBuffer: string;
 }
 
@@ -249,7 +250,7 @@ function computeSnap(
   zoom: number,
   gridStepM: number,
   excludeWallId?: string | null,
-): { point: Point; snappedEndpoint: boolean; snappedToWall: boolean; anchor: MeasurementAnchor | null } {
+): { point: Point; snappedToWall: boolean; anchor: MeasurementAnchor | null } {
   const thresholdWorld = ENDPOINT_SNAP_PX / (BASE_PPM * zoom);
   let nearest: Point | null = null;
   let nearestDist = thresholdWorld;
@@ -270,7 +271,7 @@ function computeSnap(
     }
   }
 
-  if (nearest) return { point: nearest, snappedEndpoint: true, snappedToWall: true, anchor: nearestAnchor };
+  if (nearest) return { point: nearest, snappedToWall: true, anchor: nearestAnchor };
 
   // magnet onto the nearest wall's centerline OR either of its two faces
   // (inner/outer edge) — lets a measurement (or a new wall) land exactly on
@@ -307,7 +308,7 @@ function computeSnap(
     }
   }
   if (nearestOnWall) {
-    return { point: nearestOnWall, snappedEndpoint: false, snappedToWall: true, anchor: nearestOnWallAnchor };
+    return { point: nearestOnWall, snappedToWall: true, anchor: nearestOnWallAnchor };
   }
 
   if (pendingStart) {
@@ -318,7 +319,7 @@ function computeSnap(
     // below, or an arbitrary-angle segment would drift off the grid entirely.
     if (angled !== rawWorld) {
       const dist = distance(pendingStart, angled);
-      if (dist === 0) return { point: pendingStart, snappedEndpoint: false, snappedToWall: false, anchor: null };
+      if (dist === 0) return { point: pendingStart, snappedToWall: false, anchor: null };
       const roundedDist = snapValueToStep(dist, gridStepM);
       // soft snap: only pull onto the grid step when already close to it (like
       // Figma's smart guides), otherwise track the raw cursor distance exactly
@@ -330,7 +331,6 @@ function computeSnap(
           x: pendingStart.x + Math.cos(dir) * finalDist,
           y: pendingStart.y + Math.sin(dir) * finalDist,
         },
-        snappedEndpoint: false,
         snappedToWall: false,
         anchor: null,
       };
@@ -339,7 +339,7 @@ function computeSnap(
 
   const gridPoint = snapPointToGrid(rawWorld, gridStepM);
   const onGrid = distance(rawWorld, gridPoint) <= thresholdWorld;
-  return { point: onGrid ? gridPoint : rawWorld, snappedEndpoint: false, snappedToWall: false, anchor: null };
+  return { point: onGrid ? gridPoint : rawWorld, snappedToWall: false, anchor: null };
 }
 
 /**
@@ -835,7 +835,7 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
   const drawRef = useRef<DrawState>({
     pendingStart: null,
     cursorWorld: null,
-    snappedEndpoint: false,
+    snappedToWall: false,
     lengthBuffer: "",
   });
   const dragRef = useRef<DragState>({ ...EMPTY_DRAG_STATE });
@@ -1428,6 +1428,17 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
 
     // --- in-progress wall chain ---
     const draw = drawRef.current;
+    // before the first point is placed, there's no chain to preview yet, but
+    // the cursor can still be magnetized onto an existing wall — show that
+    // same ring immediately, so it's clear where the wall's *start* will land
+    if (activeToolRef.current === "wall" && !draw.pendingStart && draw.cursorWorld && draw.snappedToWall) {
+      const p = worldToScreen(draw.cursorWorld, cam, { width, height });
+      ctx.strokeStyle = COLOR_HANDLE;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     if (activeToolRef.current === "wall" && draw.pendingStart && draw.cursorWorld) {
       const a = worldToScreen(draw.pendingStart, cam, { width, height });
       const b = worldToScreen(draw.cursorWorld, cam, { width, height });
@@ -1446,8 +1457,9 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
       ctx.arc(a.x, a.y, 4, 0, Math.PI * 2);
       ctx.fill();
 
-      if (draw.snappedEndpoint) {
-        ctx.strokeStyle = COLOR_SAGE;
+      if (draw.snappedToWall) {
+        // same magnet-ring style as the measurement tool's, for the same meaning: this endpoint is attached to another wall
+        ctx.strokeStyle = COLOR_HANDLE;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(b.x, b.y, 8, 0, Math.PI * 2);
@@ -2501,11 +2513,15 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
       if (e.shiftKey && activeToolRef.current === "wall" && drawRef.current.pendingStart) {
         const locked = computeAngleLockedPoint(drawRef.current.pendingStart, rawWorld, cam.zoom, gridSizeMRef.current);
         drawRef.current.cursorWorld = locked;
-        drawRef.current.snappedEndpoint = false;
+        drawRef.current.snappedToWall = false;
         dragLockIndicatorRef.current = locked;
       } else {
         drawRef.current.cursorWorld = snap.point;
-        drawRef.current.snappedEndpoint = snap.snappedEndpoint;
+        // broader than an exact-corner check — same "attached to another
+        // wall" trigger the measurement tool's magnet ring uses, so a wall
+        // landing on another wall's face (a T-junction), not just its
+        // corner, shows the same feedback
+        drawRef.current.snappedToWall = snap.snappedToWall;
       }
 
       // before the first click, show where the measurement's start will land
