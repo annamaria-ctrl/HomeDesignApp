@@ -519,7 +519,7 @@ export function RoundStoneTable({ item, selected }: { item: FurnitureItem; selec
 
 /** Rattan basket/egg-chair shell — a tilted partial sphere with a woven rim ring, on a pedestal leg. */
 export function RattanChair({ item, selected }: { item: FurnitureItem; selected: boolean }) {
-  const { width, depth, height, color } = item;
+  const { width, depth, color } = item;
   const shellColor = selected ? WALL_COLOR_SELECTED : color;
   const seatH = 0.4;
   const shellRadius = Math.max(width, depth) / 2;

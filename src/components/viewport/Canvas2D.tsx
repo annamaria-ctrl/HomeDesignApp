@@ -2335,11 +2335,11 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
           const diffDeg = (Math.abs(rotation - snapped) * 180) / Math.PI;
           if (e.shiftKey || diffDeg <= 3) rotation = snapped;
 
-          const size = furnitureCollisionSize(item);
+          const itemSize = furnitureCollisionSize(item);
           const settled = resolveFurniturePlacement(
             item.position,
-            size.width,
-            size.depth,
+            itemSize.width,
+            itemSize.depth,
             rotation,
             wallsRef.current,
             openingsRef.current,
@@ -2854,7 +2854,11 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
           const deltaRad = ((e.shiftKey ? -90 : 90) * Math.PI) / 180;
           for (const f of selectedFurniture) {
             const rotation = f.rotation + deltaRad;
-            const size = furnitureCollisionSize({ ...f, rotation });
+            // rotation doesn't affect the collision footprint's width/depth (only
+            // its own explicit `rotation` param to resolveFurniturePlacement below
+            // does) — furnitureCollisionSize only reads category/libraryId/width/
+            // depth/height, all unchanged by the 90° turn, so no override needed
+            const size = furnitureCollisionSize(f);
             const settled = resolveFurniturePlacement(
               f.position,
               size.width,
