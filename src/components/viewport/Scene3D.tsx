@@ -4,6 +4,8 @@ import { Canvas, useThree, useFrame } from "@react-three/fiber";
 import { OrbitControls, Grid, RoundedBox, PointerLockControls } from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl, PointerLockControls as PointerLockControlsImpl } from "three-stdlib";
 import { useDesignStore } from "../../store/useDesignStore";
+import { useIsMobileViewport } from "../../lib/useIsMobileViewport";
+import { MobileWalkthroughControls } from "./MobileWalkthroughControls";
 import type { Wall, Opening, FurnitureItem, RoomFloor, Point, CeilingLight, TimeOfDay } from "../../types";
 import {
   buildWallGeometry,
@@ -1778,7 +1780,7 @@ const WALK_SPEED_MS = 2.2;
 const WALK_SPRINT_SPEED_MS = 4.6;
 const WALK_PLAYER_SIZE_M = 0.4;
 
-/** WASD ground movement for the walkthrough camera — horizontal only (fixed eye height), collides with walls the same way furniture does. */
+/** WASD ground movement for the walkthrough camera — horizontal only (fixed eye height), collides with walls the same way furniture does. Also accepts an analog {x, y} joystick input (x: strafe, y: forward), so a touch joystick drives the exact same movement path as the keyboard instead of a separate parallel implementation. */
 function useWalkthroughMovement(
   camera: THREE.Camera,
   walls: Wall[],
@@ -1786,6 +1788,7 @@ function useWalkthroughMovement(
   furniture: FurnitureItem[],
   eyeHeight: number,
   enabled: boolean,
+  analogInputRef?: RefObject<{ x: number; y: number }>,
 ) {
   const moveRef = useRef({ forward: false, backward: false, left: false, right: false, sprint: false });
   const wallsRef = useRef(walls);
@@ -1844,7 +1847,8 @@ function useWalkthroughMovement(
     camera.position.y = eyeHeight;
     if (!enabled) return;
     const m = moveRef.current;
-    if (!m.forward && !m.backward && !m.left && !m.right) return;
+    const analog = analogInputRef?.current ?? { x: 0, y: 0 };
+    if (!m.forward && !m.backward && !m.left && !m.right && analog.x === 0 && analog.y === 0) return;
 
     const forward = new THREE.Vector3();
     camera.getWorldDirection(forward);
@@ -1858,6 +1862,10 @@ function useWalkthroughMovement(
     if (m.backward) step.addScaledVector(forward, -speed);
     if (m.right) step.addScaledVector(right, speed);
     if (m.left) step.addScaledVector(right, -speed);
+    // joystick axes are already normalized to [-1, 1] by how far the stick is
+    // pushed, so they scale the same per-frame speed rather than always being full-speed
+    if (analog.y !== 0) step.addScaledVector(forward, analog.y * speed);
+    if (analog.x !== 0) step.addScaledVector(right, analog.x * speed);
 
     const from = { x: camera.position.x, y: camera.position.z };
     const desired = { x: from.x + step.x, y: from.y + step.z };
@@ -1876,7 +1884,7 @@ function useWalkthroughMovement(
   });
 }
 
-/** First-person FPS-style walkthrough: click to lock the pointer, WASD/arrows to walk, mouse to look around. */
+/** First-person FPS-style walkthrough: click (or, on a touchscreen, an on-screen joystick + drag-to-look) to walk around. */
 export function WalkthroughScene() {
   const walls = useDesignStore((s) => s.walls);
   const openings = useDesignStore((s) => s.openings);
@@ -1887,8 +1895,20 @@ export function WalkthroughScene() {
   const timeOfDay = useDesignStore((s) => s.timeOfDay);
   const lightsOn = useDesignStore((s) => s.lightsOn);
   const walkthroughStart = useDesignStore((s) => s.walkthroughStart);
+  const isMobile = useIsMobileViewport();
   const [locked, setLocked] = useState(false);
   const controlsRef = useRef<PointerLockControlsImpl>(null);
+  // written by MobileWalkthroughControls' touch handlers, read every frame by
+  // useWalkthroughMovement/useTouchLook — refs, not state, so a finger
+  // dragging 60 times a second doesn't trigger a React re-render each time
+  const moveInputRef = useRef({ x: 0, y: 0 });
+  const lookDeltaRef = useRef({ x: 0, y: 0 });
+
+  // mobile has no pointer to lock — it's just "on" the moment there's
+  // something to walk around in, no click-to-enter gate needed
+  useEffect(() => {
+    if (isMobile && walls.length > 0) setLocked(true);
+  }, [isMobile, walls.length]);
 
   const spawn = useMemo(() => {
     // an explicit start (set with the "Walk start" tool in the 2D editor)
@@ -1938,9 +1958,21 @@ export function WalkthroughScene() {
           timeOfDay={timeOfDay}
           lightsOn={lightsOn}
         />
-        <PointerLockControls ref={controlsRef} onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />
-        <WalkthroughRig walls={walls} openings={openings} furniture={furniture} locked={locked} />
+        {!isMobile && (
+          <PointerLockControls ref={controlsRef} onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />
+        )}
+        <WalkthroughRig
+          walls={walls}
+          openings={openings}
+          furniture={furniture}
+          locked={locked}
+          moveInputRef={moveInputRef}
+          lookDeltaRef={lookDeltaRef}
+          touchLookEnabled={isMobile && locked}
+        />
       </Canvas>
+
+      {isMobile && locked && <MobileWalkthroughControls moveInputRef={moveInputRef} lookDeltaRef={lookDeltaRef} />}
 
       {walls.length === 0 && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -1950,7 +1982,7 @@ export function WalkthroughScene() {
         </div>
       )}
 
-      {walls.length > 0 && !locked && (
+      {!isMobile && walls.length > 0 && !locked && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/10">
           <button
             type="button"
@@ -1966,18 +1998,53 @@ export function WalkthroughScene() {
   );
 }
 
+/**
+ * Touch-drag look-around, standing in for PointerLockControls on mobile —
+ * there's no mouse to lock, so this reads accumulated screen-pixel deltas a
+ * DOM touch handler outside the canvas writes into `lookDeltaRef` (already
+ * scaled to radians there) and applies them the same way PointerLockControls
+ * itself does internally: read the camera's current orientation as a YXZ
+ * Euler, subtract yaw/pitch, clamp pitch short of straight up/down so it
+ * can't flip over, write it back as a quaternion. Consumes (zeroes) the ref
+ * every frame so a finger held still applies no further rotation.
+ */
+function useTouchLook(camera: THREE.Camera, lookDeltaRef: RefObject<{ x: number; y: number }>, enabled: boolean) {
+  const eulerRef = useRef(new THREE.Euler(0, 0, 0, "YXZ"));
+  useFrame(() => {
+    if (!enabled) return;
+    const delta = lookDeltaRef.current;
+    if (delta.x === 0 && delta.y === 0) return;
+    const euler = eulerRef.current;
+    euler.setFromQuaternion(camera.quaternion);
+    euler.y -= delta.x;
+    euler.x -= delta.y;
+    const maxPitch = Math.PI / 2 - 0.01;
+    euler.x = Math.max(-maxPitch, Math.min(maxPitch, euler.x));
+    camera.quaternion.setFromEuler(euler);
+    delta.x = 0;
+    delta.y = 0;
+  });
+}
+
 function WalkthroughRig({
   walls,
   openings,
   furniture,
   locked,
+  moveInputRef,
+  lookDeltaRef,
+  touchLookEnabled,
 }: {
   walls: Wall[];
   openings: Opening[];
   furniture: FurnitureItem[];
   locked: boolean;
+  moveInputRef: RefObject<{ x: number; y: number }>;
+  lookDeltaRef: RefObject<{ x: number; y: number }>;
+  touchLookEnabled: boolean;
 }) {
   const { camera } = useThree();
-  useWalkthroughMovement(camera, walls, openings, furniture, WALK_EYE_HEIGHT_M, locked);
+  useWalkthroughMovement(camera, walls, openings, furniture, WALK_EYE_HEIGHT_M, locked, moveInputRef);
+  useTouchLook(camera, lookDeltaRef, touchLookEnabled);
   return null;
 }

@@ -8,13 +8,15 @@ const OPTIONS: { id: ViewMode; label: string; icon: typeof Square }[] = [
   { id: "walkthrough", label: "Walkthrough", icon: Footprints },
 ];
 
-export function ViewToggle() {
+/** `hideWalkthrough` — the walkthrough's WASD/mouse-lock controls need a keyboard and a mouse that can be pointer-locked, neither of which a touchscreen has, so it's not offered there. */
+export function ViewToggle({ hideWalkthrough = false }: { hideWalkthrough?: boolean } = {}) {
   const viewMode = useDesignStore((s) => s.viewMode);
   const setViewMode = useDesignStore((s) => s.setViewMode);
+  const options = hideWalkthrough ? OPTIONS.filter((o) => o.id !== "walkthrough") : OPTIONS;
 
   return (
     <div className="border-studio-line bg-studio-paper/90 flex rounded-xl border p-1 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_12px_24px_-14px_rgba(43,36,28,0.35)] backdrop-blur-xl">
-      {OPTIONS.map(({ id, label, icon: Icon }) => {
+      {options.map(({ id, label, icon: Icon }) => {
         const isActive = viewMode === id;
         return (
           <button
