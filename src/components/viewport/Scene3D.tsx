@@ -30,6 +30,16 @@ import {
 
 const FURNITURE_BREAKTHROUGH_DISTANCE_M = 0.45;
 const CURSOR_RAYCAST_THROTTLE_MS = 80;
+const FURNITURE_ROTATE_HANDLE_GAP_M = 0.35;
+const FURNITURE_ROTATE_HANDLE_HIT_PX = 18;
+
+/** World (ground-plane) position of the little rotate-handle floating in front of a selected furniture item — same idea as Canvas2D's handle, just in world units instead of screen pixels since there's no fixed "zoom" here. */
+function furnitureRotateHandleGroundPos(item: FurnitureItem): Point {
+  const localForward = -item.depth / 2 - FURNITURE_ROTATE_HANDLE_GAP_M;
+  const cos = Math.cos(item.rotation);
+  const sin = Math.sin(item.rotation);
+  return { x: item.position.x - localForward * sin, y: item.position.y + localForward * cos };
+}
 
 function furnitureObstacles(items: FurnitureItem[], excludeIds: string[]): FurnitureObstacle[] {
   return items
@@ -4176,6 +4186,18 @@ function useFurnitureInteraction(
     [camera, raycaster, scene, toNDC],
   );
 
+  // the inverse of toNDC — projects a 3D world point onto the canvas in client
+  // pixel coordinates, so the rotate handle's hit-test can work as a simple
+  // screen-space distance check (like Canvas2D's), regardless of camera angle
+  const projectToScreen = useCallback(
+    (worldX: number, worldY: number, worldZ: number) => {
+      const v = new THREE.Vector3(worldX, worldY, worldZ).project(camera);
+      const rect = domElement.getBoundingClientRect();
+      return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
+    },
+    [camera, domElement],
+  );
+
   useEffect(() => {
     let downPos: { x: number; y: number } | null = null;
     let moveFurnitureId: string | null = null;
@@ -4184,6 +4206,10 @@ function useFurnitureInteraction(
     let moveObstacles: FurnitureObstacle[] = [];
     let dragStarted = false;
     let lastCursorRaycastMs = 0;
+    let rotateFurnitureId: string | null = null;
+    let rotateStartRotation = 0;
+    let rotatePointerStartAngle = 0;
+    let rotateArmed = false;
 
     const onPointerDown = (e: PointerEvent) => {
       if (readOnlyRef.current) return;
@@ -4191,6 +4217,25 @@ function useFurnitureInteraction(
       downPos = { x: e.clientX, y: e.clientY };
       dragStarted = false;
       moveFurnitureId = null;
+      rotateFurnitureId = null;
+      rotateArmed = false;
+
+      if (activeToolRef.current === "select" && selectedIdsRef.current.length === 1) {
+        const sole = furnitureRef.current.find((f) => f.id === selectedIdsRef.current[0]);
+        if (sole) {
+          const handleGround = furnitureRotateHandleGroundPos(sole);
+          const handleScreen = projectToScreen(handleGround.x, sole.height + 0.12, handleGround.y);
+          if (Math.hypot(e.clientX - handleScreen.x, e.clientY - handleScreen.y) <= FURNITURE_ROTATE_HANDLE_HIT_PX) {
+            rotateFurnitureId = sole.id;
+            rotateStartRotation = sole.rotation;
+            const floorAtDown = raycastFloor(e.clientX, e.clientY);
+            rotatePointerStartAngle = floorAtDown
+              ? Math.atan2(floorAtDown.y - sole.position.y, floorAtDown.x - sole.position.x)
+              : 0;
+            return;
+          }
+        }
+      }
 
       if (activeToolRef.current === "select") {
         const hitId = raycastFurniture(e.clientX, e.clientY);
@@ -4220,6 +4265,41 @@ function useFurnitureInteraction(
       } else {
         if (previewPointRef.current) setPreviewPoint(null);
         domElement.style.cursor = "";
+      }
+
+      if (downPos && rotateFurnitureId) {
+        const movedForRotate = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
+        if (movedForRotate >= CLICK_TOLERANCE_PX) {
+          if (!rotateArmed) {
+            rotateArmed = true;
+            if (controlsRef.current) controlsRef.current.enabled = false;
+            domElement.style.cursor = "grabbing";
+            pushHistory();
+          }
+          const item = furnitureRef.current.find((f) => f.id === rotateFurnitureId);
+          const floorPoint = raycastFloor(e.clientX, e.clientY);
+          if (item && floorPoint) {
+            const pointerAngle = Math.atan2(floorPoint.y - item.position.y, floorPoint.x - item.position.x);
+            let rotation = rotateStartRotation + (pointerAngle - rotatePointerStartAngle);
+            // soft-snap to 15° increments (always when close, or forced with Shift) — same feel as the 2D rotate handle
+            const stepRad = (15 * Math.PI) / 180;
+            const snapped = Math.round(rotation / stepRad) * stepRad;
+            const diffDeg = (Math.abs(rotation - snapped) * 180) / Math.PI;
+            if (e.shiftKey || diffDeg <= 3) rotation = snapped;
+            const size = furnitureCollisionSize(item);
+            const settled = resolveFurniturePlacement(
+              item.position,
+              size.width,
+              size.depth,
+              rotation,
+              wallsRef.current,
+              openingsRef.current,
+              furnitureObstacles(furnitureRef.current, [item.id]),
+            );
+            updateFurniture(item.id, { rotation, position: settled });
+          }
+        }
+        return;
       }
 
       if (!downPos || !moveFurnitureId || !moveOrigin) return;
@@ -4277,11 +4357,18 @@ function useFurnitureInteraction(
       const wasDown = downPos;
       const clickedFurnitureId = moveFurnitureId;
       const wasDragging = dragStarted;
+      const wasRotating = rotateFurnitureId !== null;
       downPos = null;
       moveFurnitureId = null;
       moveOrigin = null;
       moveSnapshot = [];
       dragStarted = false;
+      rotateFurnitureId = null;
+      rotateArmed = false;
+
+      // a click (even a tiny one) that landed on the rotate handle shouldn't fall through
+      // to the empty-space "deselect" logic below — it was aimed at the handle, not the floor
+      if (wasRotating) return;
 
       if (e.button !== 0 || !wasDown) return;
       const moved = Math.hypot(e.clientX - wasDown.x, e.clientY - wasDown.y);
@@ -4343,6 +4430,7 @@ function useFurnitureInteraction(
     domElement,
     raycastFloor,
     raycastFurniture,
+    projectToScreen,
     addFurniture,
     updateFurniture,
     removeElements,
@@ -4355,7 +4443,12 @@ function useFurnitureInteraction(
   return previewPoint;
 }
 
-/** Semi-transparent ghost of the item armed for placement, following the cursor across the floor. */
+/**
+ * Semi-transparent ghost of the item armed for placement, following the
+ * cursor across the floor, plus — when exactly one furniture item is
+ * selected — a small floating handle in front of it that can be dragged to
+ * free-rotate the item, the same gesture Canvas2D offers in the top-down view.
+ */
 function FurnitureInteractionLayer({
   controlsRef,
   readOnly,
@@ -4366,14 +4459,27 @@ function FurnitureInteractionLayer({
   const { camera, gl, scene } = useThree();
   const previewPoint = useFurnitureInteraction(camera, gl.domElement, scene, controlsRef, readOnly);
   const pendingFurniture = useDesignStore((s) => s.pendingFurniture);
+  const furniture = useDesignStore((s) => s.furniture);
+  const selectedIds = useDesignStore((s) => s.selectedIds);
 
-  if (!pendingFurniture || !previewPoint) return null;
+  const soleSelected = !readOnly && selectedIds.length === 1 ? furniture.find((f) => f.id === selectedIds[0]) : undefined;
+  const handleGround = soleSelected ? furnitureRotateHandleGroundPos(soleSelected) : null;
 
   return (
-    <mesh position={[previewPoint.x, pendingFurniture.height / 2, previewPoint.y]}>
-      <boxGeometry args={[pendingFurniture.width, pendingFurniture.height, pendingFurniture.depth]} />
-      <meshStandardMaterial color={pendingFurniture.color} transparent opacity={0.45} depthWrite={false} />
-    </mesh>
+    <>
+      {pendingFurniture && previewPoint && (
+        <mesh position={[previewPoint.x, pendingFurniture.height / 2, previewPoint.y]}>
+          <boxGeometry args={[pendingFurniture.width, pendingFurniture.height, pendingFurniture.depth]} />
+          <meshStandardMaterial color={pendingFurniture.color} transparent opacity={0.45} depthWrite={false} />
+        </mesh>
+      )}
+      {soleSelected && handleGround && (
+        <mesh position={[handleGround.x, soleSelected.height + 0.12, handleGround.y]} renderOrder={1}>
+          <sphereGeometry args={[0.06, 16, 16]} />
+          <meshBasicMaterial color={WALL_COLOR_SELECTED} depthTest={false} />
+        </mesh>
+      )}
+    </>
   );
 }
 

@@ -1185,6 +1185,24 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
       ctx.lineWidth = isSelected ? 2.5 : 1.25;
       ctx.strokeStyle = isSelected ? COLOR_CLAY : COLOR_INK_SOFT;
       ctx.strokeRect(-w / 2, -d / 2, w, d);
+
+      // front-facing chevron — local +Y (the "south" edge at rotation 0), matching
+      // the same local-+Z convention every 3D model's own front-facing details
+      // (screens, door handles, control panels) are built against, so front/back
+      // reads at a glance in the 2D plan without needing to select the item first
+      if (Math.min(w, d) > 22) {
+        const chevronSize = Math.min(d * 0.2, w * 0.5, 11);
+        const tipY = d / 2 - chevronSize * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(-chevronSize * 0.55, tipY - chevronSize * 0.6);
+        ctx.lineTo(0, tipY);
+        ctx.lineTo(chevronSize * 0.55, tipY - chevronSize * 0.6);
+        ctx.lineWidth = isSelected ? 2 : 1.5;
+        ctx.strokeStyle = isSelected ? COLOR_CLAY : COLOR_INK_SOFT;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.stroke();
+      }
       ctx.restore();
 
       // label stays upright regardless of the item's rotation, for legibility
