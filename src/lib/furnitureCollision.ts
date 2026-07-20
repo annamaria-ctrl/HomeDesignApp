@@ -1,5 +1,5 @@
 import type { Point, Wall, Opening } from "../types";
-import { distance, angleRad } from "./geometry";
+import { distance, angleRad, projectPointOnSegment } from "./geometry";
 
 interface OBB {
   center: Point;
@@ -342,4 +342,56 @@ export function sweepFurniturePlacement(
     return resolveFurniturePlacementWithSegs(to, width, depth, rotation, wallSegs, others, elevationM, heightM);
   }
   return current;
+}
+
+const FURNITURE_WALL_SNAP_THRESHOLD_M = 0.35;
+const FURNITURE_WALL_SNAP_GAP_M = 0.002; // a hair off the wall face, so the collision resolver above never treats "just placed flush" as an overlap from float rounding
+
+export interface FurnitureWallSnap {
+  position: Point;
+  rotation: number;
+  wallId: string;
+}
+
+/**
+ * If `point` is within snapping range of a wall, returns the position+rotation
+ * that would sit the item's back flush against that wall's face (centered
+ * on the nearest point along it), oriented so its front (local +Y, the same
+ * direction Canvas2D's chevron and the rotate handle already treat as
+ * "front") faces away from the wall into whichever side `point` is actually
+ * on — mirrors placing, upper cabinets, headboards, etc. all want exactly
+ * this "shove it against the wall" gesture instead of free-form dragging
+ * pixel-perfect alignment by hand. Returns null when nothing is close enough.
+ */
+export function snapFurnitureToWall(point: Point, depth: number, walls: Wall[]): FurnitureWallSnap | null {
+  let best: { wall: Wall; point: Point; dist: number } | null = null;
+  for (const wall of walls) {
+    const proj = projectPointOnSegment(point, wall.start, wall.end);
+    if (proj.distance > FURNITURE_WALL_SNAP_THRESHOLD_M) continue;
+    if (!best || proj.distance < best.dist) best = { wall, point: proj.point, dist: proj.distance };
+  }
+  if (!best) return null;
+
+  const { wall, point: onWall } = best;
+  const dx = wall.end.x - wall.start.x;
+  const dy = wall.end.y - wall.start.y;
+  const len = Math.hypot(dx, dy) || 1;
+  let nx = -dy / len;
+  let ny = dx / len;
+  // pick whichever side of the wall's centerline `point` is actually on, so it
+  // snaps into the room the cursor is in rather than flipping to the far side
+  const toPoint = { x: point.x - onWall.x, y: point.y - onWall.y };
+  if (toPoint.x * nx + toPoint.y * ny < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+
+  const offset = wall.thickness / 2 + depth / 2 + FURNITURE_WALL_SNAP_GAP_M;
+  return {
+    position: { x: onWall.x + nx * offset, y: onWall.y + ny * offset },
+    // solves sin/cos so the item's local +Y (its "front") points along (nx, ny) —
+    // see furnitureCorners()/the rotate handle for the same local-frame convention
+    rotation: Math.atan2(-nx, ny),
+    wallId: wall.id,
+  };
 }

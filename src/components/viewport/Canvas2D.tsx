@@ -35,6 +35,7 @@ import {
   resolveFurniturePlacement,
   sweepFurniturePlacement,
   furnitureCollisionSize,
+  snapFurnitureToWall,
   type FurnitureObstacle,
 } from "../../lib/furnitureCollision";
 
@@ -965,8 +966,8 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
   // so locking a wall/measurement endpoint to 45/90° gives the same visual
   // "caught on something" feedback as snapping onto a wall or corner does
   const dragLockIndicatorRef = useRef<Point | null>(null);
-  // world-space point the pending furniture item would land on if clicked right now
-  const furniturePreviewRef = useRef<Point | null>(null);
+  // world-space point (and, once near a wall, the flush-against-it rotation) the pending furniture item would land on if clicked right now
+  const furniturePreviewRef = useRef<{ point: Point; rotation: number } | null>(null);
   // live position+heading while dragging with the "walkStart" tool — committed to the store on mouseup
   const walkStartPreviewRef = useRef<WalkthroughStart | null>(null);
 
@@ -1390,12 +1391,13 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
     // --- furniture placement ghost preview (before the click that drops it) ---
     if (activeToolRef.current === "furniture" && pendingFurnitureRef.current && furniturePreviewRef.current) {
       const pending = pendingFurnitureRef.current;
-      const p = furniturePreviewRef.current;
-      const center = worldToScreen(p, cam, { width, height });
+      const preview = furniturePreviewRef.current;
+      const center = worldToScreen(preview.point, cam, { width, height });
       const w = pending.width * scale;
       const d = pending.depth * scale;
       ctx.save();
       ctx.translate(center.x, center.y);
+      ctx.rotate(preview.rotation);
       ctx.globalAlpha = 0.45;
       ctx.fillStyle = pending.color;
       ctx.fillRect(-w / 2, -d / 2, w, d);
@@ -2031,13 +2033,15 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
       if (activeToolRef.current === "furniture") {
         const pending = pendingFurnitureRef.current;
         if (pending) {
-          const point = furniturePreviewRef.current ?? rawWorld;
+          const preview = furniturePreviewRef.current;
+          const point = preview?.point ?? rawWorld;
+          const rotation = preview?.rotation ?? 0;
           const size = furnitureCollisionSize(pending);
           const settled = resolveFurniturePlacement(
             point,
             size.width,
             size.depth,
-            0,
+            rotation,
             wallsRef.current,
             openingsRef.current,
             furnitureObstacles(furnitureRef.current, []),
@@ -2045,7 +2049,7 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
             pending.height,
           );
           pushHistory();
-          const id = addFurniture({ ...pending, position: settled, rotation: 0 });
+          const id = addFurniture({ ...pending, position: settled, rotation });
           setSelection([id]);
           selectedIdsRef.current = [id];
         }
@@ -2442,17 +2446,23 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
           y: Math.abs(delta.y - griddedY) <= thresholdWorld ? griddedY : delta.y,
         };
         const obstacles = drag.furnitureObstaclesSnapshot ?? [];
+        // wall-snapping only makes sense dragging a single item — several items snapping
+        // independently to whichever wall each one nears would be chaotic, not helpful
+        const singleDragId = drag.furnitureSnapshot.length === 1 ? drag.furnitureSnapshot[0].id : null;
         for (const snap of drag.furnitureSnapshot) {
           const item = furnitureRef.current.find((f) => f.id === snap.id);
           if (!item) continue;
           const desired = { x: snap.position.x + delta.x, y: snap.position.y + delta.y };
           const size = furnitureCollisionSize(item);
+          const wallSnap = snap.id === singleDragId ? snapFurnitureToWall(desired, size.depth, wallsRef.current) : null;
+          const rotation = wallSnap?.rotation ?? item.rotation;
+          const target = wallSnap?.position ?? desired;
           const settled = sweepFurniturePlacement(
             snap.settled,
-            desired,
+            target,
             size.width,
             size.depth,
-            item.rotation,
+            rotation,
             wallsRef.current,
             openingsRef.current,
             obstacles,
@@ -2461,7 +2471,7 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
             item.height,
           );
           snap.settled = settled;
-          updateFurniture(snap.id, { position: settled });
+          updateFurniture(snap.id, { position: settled, rotation });
         }
         render();
         return;
@@ -2686,9 +2696,15 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
       }
 
       if (activeToolRef.current === "furniture" && pendingFurnitureRef.current) {
-        const gridPoint = snapPointToGrid(rawWorld, gridSizeMRef.current);
-        const thresholdWorld = ENDPOINT_SNAP_PX / (BASE_PPM * cam.zoom);
-        furniturePreviewRef.current = distance(rawWorld, gridPoint) <= thresholdWorld ? gridPoint : rawWorld;
+        const wallSnap = snapFurnitureToWall(rawWorld, pendingFurnitureRef.current.depth, wallsRef.current);
+        if (wallSnap) {
+          furniturePreviewRef.current = { point: wallSnap.position, rotation: wallSnap.rotation };
+        } else {
+          const gridPoint = snapPointToGrid(rawWorld, gridSizeMRef.current);
+          const thresholdWorld = ENDPOINT_SNAP_PX / (BASE_PPM * cam.zoom);
+          const point = distance(rawWorld, gridPoint) <= thresholdWorld ? gridPoint : rawWorld;
+          furniturePreviewRef.current = { point, rotation: 0 };
+        }
       }
 
       // Alt-hover spacing readout (Figma-style): with exactly one furniture item
