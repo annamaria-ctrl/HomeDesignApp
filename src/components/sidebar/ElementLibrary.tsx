@@ -54,6 +54,8 @@ interface LibraryItem {
   depth: number;
   height: number;
   color: string;
+  /** Default height above the floor this item is placed at — e.g. a wall cabinet mounted above the counter, not sitting on the floor. Omitted (0) for anything floor-standing. */
+  elevation?: number;
 }
 
 const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
@@ -233,7 +235,7 @@ const LIBRARY_ITEMS: LibraryItem[] = [
   { id: "undercounter-freezer", label: "Undercounter freezer", category: "kitchen", icon: Refrigerator, width: 0.6, depth: 0.65, height: 0.85, color: "#d8d8d8" },
   { id: "butcher-block-cart", label: "Butcher block cart", category: "kitchen", icon: ChefHat, width: 0.9, depth: 0.5, height: 0.9, color: "#c9a06a" },
   { id: "kitchen-base-cabinet", label: "Kitchen base cabinet", category: "kitchen", icon: ChefHat, width: 0.6, depth: 0.6, height: 0.85, color: "#e8e4da" },
-  { id: "kitchen-upper-cabinet", label: "Kitchen upper cabinet", category: "kitchen", icon: ChefHat, width: 0.6, depth: 0.32, height: 0.7, color: "#f5f5f0" },
+  { id: "kitchen-upper-cabinet", label: "Kitchen upper cabinet", category: "kitchen", icon: ChefHat, width: 0.6, depth: 0.32, height: 0.7, color: "#f5f5f0", elevation: 1.4 },
   { id: "liquor-cabinet", label: "Liquor cabinet", category: "kitchen", icon: Wine, width: 0.9, depth: 0.4, height: 1.6, color: "#5c4632" },
   { id: "french-door-fridge", label: "French door fridge", category: "kitchen", icon: Refrigerator, width: 0.9, depth: 0.75, height: 1.8, color: "#d8d8d8" },
   { id: "kitchen-sink-cabinet", label: "Kitchen sink cabinet", category: "kitchen", icon: ChefHat, width: 0.9, depth: 0.6, height: 0.9, color: "#e8e4da" },
@@ -356,6 +358,7 @@ export function ElementLibrary() {
       depth: item.depth,
       height: item.height,
       color: item.color,
+      elevation: item.elevation,
     });
     setActiveTool("furniture");
   }

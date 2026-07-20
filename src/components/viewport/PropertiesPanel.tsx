@@ -207,6 +207,7 @@ export function PropertiesPanel() {
   const furnitureWidthCm = selectedFurniture.length > 0 ? Math.round(selectedFurniture[0].width * 100) : 0;
   const furnitureDepthCm = selectedFurniture.length > 0 ? Math.round(selectedFurniture[0].depth * 100) : 0;
   const furnitureHeightCm = selectedFurniture.length > 0 ? Math.round(selectedFurniture[0].height * 100) : 0;
+  const furnitureElevationCm = selectedFurniture.length > 0 ? Math.round((selectedFurniture[0].elevation ?? 0) * 100) : 0;
   const furnitureColor = selectedFurniture.length > 0 ? selectedFurniture[0].color : "#8b7355";
 
   function resolveGeometryChange(
@@ -241,6 +242,12 @@ export function PropertiesPanel() {
       const height = cm / 100;
       updateFurniture(f.id, { height, position: resolveGeometryChange(f, { height }) });
     }
+  }
+
+  function applyFurnitureElevation(cm: number) {
+    pushHistory();
+    const elevation = cm / 100;
+    for (const f of selectedFurniture) updateFurniture(f.id, { elevation });
   }
 
   function applyFurnitureColor(color: string) {
@@ -421,6 +428,13 @@ export function PropertiesPanel() {
             min={MIN_FURNITURE_SIZE_CM}
             max={MAX_FURNITURE_HEIGHT_CM}
             onCommit={applyFurnitureHeight}
+          />
+          <NumberField
+            label="Elevation"
+            valueCm={furnitureElevationCm}
+            min={0}
+            max={MAX_FURNITURE_HEIGHT_CM}
+            onCommit={applyFurnitureElevation}
           />
           <div className="flex items-center gap-2">
             <span className="text-studio-ink-soft flex-1">Color</span>

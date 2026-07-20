@@ -50,6 +50,8 @@ export interface FurnitureItem {
   depth: number; // meters
   height: number; // meters
   color: string;
+  /** Height of the item's own floor (its base) above the room's real floor, in meters — 0 (or omitted) for anything floor-standing. Lets a wall cabinet sit above a base cabinet, or a lamp sit on a console table/cabinet top, instead of every item always resting at floor level. */
+  elevation?: number;
 }
 
 export interface Room {

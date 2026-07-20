@@ -4607,7 +4607,7 @@ function useFurnitureInteraction(
         const sole = furnitureRef.current.find((f) => f.id === selectedIdsRef.current[0]);
         if (sole) {
           const handleGround = furnitureRotateHandleGroundPos(sole);
-          const handleScreen = projectToScreen(handleGround.x, sole.height + 0.12, handleGround.y);
+          const handleScreen = projectToScreen(handleGround.x, (sole.elevation ?? 0) + sole.height + 0.12, handleGround.y);
           if (Math.hypot(e.clientX - handleScreen.x, e.clientY - handleScreen.y) <= FURNITURE_ROTATE_HANDLE_HIT_PX) {
             rotateFurnitureId = sole.id;
             rotateStartRotation = sole.rotation;
@@ -4851,13 +4851,18 @@ function FurnitureInteractionLayer({
   return (
     <>
       {pendingFurniture && previewPoint && (
-        <mesh position={[previewPoint.x, pendingFurniture.height / 2, previewPoint.y]}>
+        <mesh
+          position={[previewPoint.x, (pendingFurniture.elevation ?? 0) + pendingFurniture.height / 2, previewPoint.y]}
+        >
           <boxGeometry args={[pendingFurniture.width, pendingFurniture.height, pendingFurniture.depth]} />
           <meshStandardMaterial color={pendingFurniture.color} transparent opacity={0.45} depthWrite={false} />
         </mesh>
       )}
       {soleSelected && handleGround && (
-        <mesh position={[handleGround.x, soleSelected.height + 0.12, handleGround.y]} renderOrder={1}>
+        <mesh
+          position={[handleGround.x, (soleSelected.elevation ?? 0) + soleSelected.height + 0.12, handleGround.y]}
+          renderOrder={1}
+        >
           <sphereGeometry args={[0.06, 16, 16]} />
           <meshBasicMaterial color={WALL_COLOR_SELECTED} depthTest={false} />
         </mesh>
@@ -5099,7 +5104,14 @@ function SceneObjects({
       {furniture.map((item) => {
         const selected = selectedIds.includes(item.id);
         const Model = resolveFurnitureComponent(item) ?? FurnitureMesh;
-        return <Model key={item.id} item={item} selected={selected} />;
+        // a pure Y offset on a wrapping group — every model's own root group
+        // already positions itself in X/Z from item.position, so this composes
+        // cleanly on top without any model needing to know about elevation itself
+        return (
+          <group key={item.id} position={[0, item.elevation ?? 0, 0]}>
+            <Model item={item} selected={selected} />
+          </group>
+        );
       })}
     </>
   );

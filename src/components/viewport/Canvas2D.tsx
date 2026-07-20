@@ -2679,8 +2679,13 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
 
       // Alt-hover spacing readout (Figma-style): with exactly one furniture item
       // selected, holding Alt and hovering another item or a wall shows the gap
-      // between them — cleared the moment either condition isn't met anymore
-      if (activeToolRef.current === "select" && e.altKey && selectedIdsRef.current.length === 1) {
+      // between them — cleared the moment either condition isn't met anymore.
+      // Deliberately not gated on the active tool being "select": placing an
+      // item leaves the tool armed on "furniture" for repeat placement, and
+      // the item just placed is still the sole selection, so requiring
+      // "select" specifically made this silently never trigger right after
+      // placing something — which is exactly when you'd want to check spacing.
+      if (e.altKey && selectedIdsRef.current.length === 1) {
         const selected = furnitureRef.current.find((f) => f.id === selectedIdsRef.current[0]);
         const hitFurniture = selected
           ? hitTestFurniture(
@@ -2804,6 +2809,11 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
       if (readOnlyRef.current) return;
       const active = document.activeElement;
       if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
+
+      // bare Alt/Option, held for the spacing-readout hover, is also the browser's own
+      // "focus the menu bar" shortcut in some browsers — left alone, that can steal focus
+      // away from this window mid-hover and the readout would just silently stop updating
+      if (e.key === "Alt") e.preventDefault();
 
       if (activeToolRef.current === "wall" && drawRef.current.pendingStart) {
         if (/^[0-9]$/.test(e.key)) {

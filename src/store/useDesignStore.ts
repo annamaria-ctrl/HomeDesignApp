@@ -15,7 +15,7 @@ import type {
 } from "../types";
 
 /** The library item picked in the sidebar, waiting to be dropped onto the canvas by the "furniture" tool. */
-export type PendingFurniture = Pick<FurnitureItem, "libraryId" | "category" | "label" | "width" | "depth" | "height" | "color">;
+export type PendingFurniture = Pick<FurnitureItem, "libraryId" | "category" | "label" | "width" | "depth" | "height" | "color" | "elevation">;
 import type { ProjectData } from "../lib/projectFile";
 import { DEFAULT_WALL_THICKNESS } from "../lib/constants";
 
