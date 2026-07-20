@@ -1320,6 +1320,76 @@ export function RockingChairModel({ item, selected }: { item: FurnitureItem; sel
   );
 }
 
+const KIDS_CHAIR_SEAT_SIZE = 0.28;
+const KIDS_CHAIR_SEAT_HEIGHT = 0.28;
+const KIDS_CHAIR_BACK_HEIGHT = 0.26;
+const KIDS_CHAIR_LEG_THICKNESS = 0.025;
+const KIDS_CHAIR_GAP = 0.04;
+
+/** A single miniature chair, scaled for a child rather than sharing the adult Chair's fixed dimensions. */
+function KidsChair({ position, rotationY, color }: { position: [number, number, number]; rotationY: number; color: string }) {
+  const legInset = KIDS_CHAIR_SEAT_SIZE / 2 - KIDS_CHAIR_LEG_THICKNESS / 2 - 0.015;
+  const legOffsets: [number, number][] = [
+    [-legInset, -legInset],
+    [legInset, -legInset],
+    [legInset, legInset],
+    [-legInset, legInset],
+  ];
+  return (
+    <group position={position} rotation={[0, rotationY, 0]}>
+      <mesh position={[0, KIDS_CHAIR_SEAT_HEIGHT, 0]} castShadow receiveShadow>
+        <boxGeometry args={[KIDS_CHAIR_SEAT_SIZE, 0.03, KIDS_CHAIR_SEAT_SIZE]} />
+        <meshStandardMaterial color={color} roughness={0.6} />
+      </mesh>
+      <mesh position={[0, KIDS_CHAIR_SEAT_HEIGHT + KIDS_CHAIR_BACK_HEIGHT / 2, -KIDS_CHAIR_SEAT_SIZE / 2 + 0.015]} castShadow receiveShadow>
+        <boxGeometry args={[KIDS_CHAIR_SEAT_SIZE, KIDS_CHAIR_BACK_HEIGHT, 0.03]} />
+        <meshStandardMaterial color={color} roughness={0.6} />
+      </mesh>
+      {legOffsets.map(([x, z], i) => (
+        <mesh key={i} position={[x, KIDS_CHAIR_SEAT_HEIGHT / 2, z]} castShadow receiveShadow>
+          <boxGeometry args={[KIDS_CHAIR_LEG_THICKNESS, KIDS_CHAIR_SEAT_HEIGHT, KIDS_CHAIR_LEG_THICKNESS]} />
+          <meshStandardMaterial color={color} roughness={0.6} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Kids table and chairs: a small round table ringed with 4 miniature chairs in two playful colors — the same "bundled" idea as the adult dining table, scaled down. */
+export function KidsTableChairs({ item, selected }: { item: FurnitureItem; selected: boolean }) {
+  const { width, depth, height, color } = item;
+  const topColor = selected ? WALL_COLOR_SELECTED : color;
+  const radius = Math.min(width, depth) / 2;
+  const topThickness = 0.03;
+  const legThickness = 0.04;
+  const chairOffset = radius + KIDS_CHAIR_GAP + KIDS_CHAIR_SEAT_SIZE / 2;
+  const chairCount = 4;
+
+  return (
+    <group position={[item.position.x, 0, item.position.y]} rotation={[0, -item.rotation, 0]} userData={{ furnitureId: item.id }}>
+      <mesh position={[0, height - topThickness / 2, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[radius, radius, topThickness, 24]} />
+        <meshStandardMaterial color={topColor} roughness={0.5} />
+      </mesh>
+      <mesh position={[0, (height - topThickness) / 2, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[legThickness, legThickness * 1.4, height - topThickness, 16]} />
+        <meshStandardMaterial color={topColor} roughness={0.6} />
+      </mesh>
+      {Array.from({ length: chairCount }, (_, i) => {
+        const theta = (i / chairCount) * Math.PI * 2 + Math.PI / 4;
+        return (
+          <KidsChair
+            key={i}
+            position={[Math.sin(theta) * chairOffset, 0, Math.cos(theta) * chairOffset]}
+            rotationY={theta + Math.PI}
+            color={i % 2 === 0 ? "#e0704a" : "#5f9ea0"}
+          />
+        );
+      })}
+    </group>
+  );
+}
+
 /** Bed frame + mattress with a draped duvet and 1-2 pillows (single vs. double width) at the head. */
 export function BedWithLinens({ item, selected }: { item: FurnitureItem; selected: boolean }) {
   const { width, depth, height, color } = item;
@@ -1944,6 +2014,50 @@ export function CubbyOrganizer({ item, selected }: { item: FurnitureItem; select
   );
 }
 
+/** Toy shelf: an open shelving frame holding a row of chunky, brightly colored storage bins instead of books — a kids'-room counterpart to the plain Bookshelf. */
+export function ToyShelf({ item, selected }: { item: FurnitureItem; selected: boolean }) {
+  const { width, depth, height, color } = item;
+  const frameColor = selected ? WALL_COLOR_SELECTED : color;
+  const shelfCount = 3;
+  const boardThickness = 0.03;
+  const gap = (height - boardThickness) / shelfCount;
+  const binColors = ["#e0704a", "#5f9ea0", "#e0c04a", "#7a9e5f"];
+
+  return (
+    <group position={[item.position.x, 0, item.position.y]} rotation={[0, -item.rotation, 0]} userData={{ furnitureId: item.id }}>
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[side * (width / 2 - boardThickness / 2), height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[boardThickness, height, depth]} />
+          <meshStandardMaterial color={frameColor} roughness={0.7} />
+        </mesh>
+      ))}
+      {Array.from({ length: shelfCount + 1 }, (_, i) => (
+        <mesh key={i} position={[0, i * gap + boardThickness / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, boardThickness, depth]} />
+          <meshStandardMaterial color={frameColor} roughness={0.7} />
+        </mesh>
+      ))}
+      {Array.from({ length: shelfCount }, (_, shelfIdx) => {
+        const binCount = 2;
+        const y = shelfIdx * gap + boardThickness;
+        const binH = gap * 0.6;
+        const binW = (width * 0.8) / binCount;
+        return Array.from({ length: binCount }, (_, binIdx) => (
+          <mesh
+            key={`${shelfIdx}-${binIdx}`}
+            position={[-width * 0.4 + binW * (binIdx + 0.5) + width * 0.1, y + binH / 2, 0]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={[binW * 0.85, binH, depth * 0.75]} />
+            <meshStandardMaterial color={binColors[(shelfIdx * binCount + binIdx) % binColors.length]} roughness={0.6} />
+          </mesh>
+        ));
+      })}
+    </group>
+  );
+}
+
 /** China hutch: a glass-front display cabinet on top of a solid, closed-door base cabinet. */
 export function Hutch({ item, selected }: { item: FurnitureItem; selected: boolean }) {
   const { width, depth, height, color } = item;
@@ -2054,6 +2168,228 @@ export function WeaveBasket({ item, selected }: { item: FurnitureItem; selected:
       <mesh position={[0, height * 0.95, 0]} castShadow>
         <torusGeometry args={[radius * 0.98, 0.015, 8, 24]} />
         <meshStandardMaterial color={basketColor} roughness={1} />
+      </mesh>
+    </group>
+  );
+}
+
+/**
+ * Lower/base kitchen cabinet: a run of door + drawer fronts under a slim
+ * countertop overhang — the everyday "one unit in a row" cabinet, as
+ * opposed to KitchenIsland which is a full freestanding island.
+ */
+export function KitchenBaseCabinet({ item, selected }: { item: FurnitureItem; selected: boolean }) {
+  const { width, depth, height, color } = item;
+  const cabinetColor = selected ? WALL_COLOR_SELECTED : color;
+  const topThickness = 0.03;
+  const cabinetHeight = height - topThickness;
+  const frontZ = depth / 2 + 0.002;
+  const drawerH = cabinetHeight * 0.22;
+  const doorZoneW = width * 0.6;
+  const doorZoneX = width / 2 - doorZoneW / 2;
+
+  return (
+    <group position={[item.position.x, 0, item.position.y]} rotation={[0, -item.rotation, 0]} userData={{ furnitureId: item.id }}>
+      <RoundedBox args={[width, cabinetHeight, depth]} radius={0.015} smoothness={2} position={[0, cabinetHeight / 2, 0]} castShadow receiveShadow>
+        <meshStandardMaterial color={cabinetColor} roughness={0.6} />
+      </RoundedBox>
+      <mesh position={[-width * 0.2, cabinetHeight - drawerH / 2, frontZ]} castShadow>
+        <boxGeometry args={[width * 0.36, 0.006, 0.006]} />
+        <meshStandardMaterial color="#2a2a2a" roughness={0.5} />
+      </mesh>
+      <mesh position={[-width * 0.2, cabinetHeight - drawerH / 2, frontZ + 0.018]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.008, 0.008, width * 0.14, 8]} />
+        <meshStandardMaterial color="#c9c9c9" roughness={0.3} metalness={0.6} />
+      </mesh>
+      <mesh position={[doorZoneX, (cabinetHeight - drawerH) / 2, frontZ]} castShadow>
+        <boxGeometry args={[0.006, cabinetHeight - drawerH, 0.006]} />
+        <meshStandardMaterial color="#2a2a2a" roughness={0.5} />
+      </mesh>
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[doorZoneX + (side * doorZoneW) / 4, cabinetHeight * 0.45, frontZ + 0.02]} castShadow>
+          <cylinderGeometry args={[0.008, 0.008, (cabinetHeight - drawerH) * 0.16, 8]} />
+          <meshStandardMaterial color="#c9c9c9" roughness={0.3} metalness={0.6} />
+        </mesh>
+      ))}
+      <RoundedBox
+        args={[width + 0.03, topThickness, depth + 0.03]}
+        radius={0.008}
+        smoothness={2}
+        position={[0, cabinetHeight + topThickness / 2, 0]}
+        castShadow
+        receiveShadow
+      >
+        <meshStandardMaterial color="#e8e4da" roughness={0.3} />
+      </RoundedBox>
+    </group>
+  );
+}
+
+/**
+ * Upper/wall kitchen cabinet: a shallow two-door cabinet, sized the way a
+ * cabinet mounted above the counter would be (short and shallow) even
+ * though — like every other item here — it stands on the floor plan.
+ */
+export function KitchenUpperCabinet({ item, selected }: { item: FurnitureItem; selected: boolean }) {
+  const { width, depth, height, color } = item;
+  const cabinetColor = selected ? WALL_COLOR_SELECTED : color;
+  const frontZ = depth / 2 + 0.002;
+
+  return (
+    <group position={[item.position.x, 0, item.position.y]} rotation={[0, -item.rotation, 0]} userData={{ furnitureId: item.id }}>
+      <RoundedBox args={[width, height, depth]} radius={0.015} smoothness={2} position={[0, height / 2, 0]} castShadow receiveShadow>
+        <meshStandardMaterial color={cabinetColor} roughness={0.6} />
+      </RoundedBox>
+      <mesh position={[0, height / 2, frontZ]} castShadow>
+        <boxGeometry args={[0.006, height * 0.9, 0.006]} />
+        <meshStandardMaterial color="#2a2a2a" roughness={0.5} />
+      </mesh>
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[side * width * 0.15, height * 0.5, frontZ + 0.018]} castShadow>
+          <cylinderGeometry args={[0.007, 0.007, height * 0.14, 8]} />
+          <meshStandardMaterial color="#c9c9c9" roughness={0.3} metalness={0.6} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Liquor cabinet / home bar vitrine: a glass-front cabinet with a mid shelf holding a row of bottle and glass shapes. */
+export function LiquorCabinet({ item, selected }: { item: FurnitureItem; selected: boolean }) {
+  const { width, depth, height, color } = item;
+  const bodyColor = selected ? WALL_COLOR_SELECTED : color;
+  const baseH = height * 0.32;
+  const upperH = height - baseH;
+  const shelfY = baseH + upperH * 0.42;
+
+  return (
+    <group position={[item.position.x, 0, item.position.y]} rotation={[0, -item.rotation, 0]} userData={{ furnitureId: item.id }}>
+      <RoundedBox args={[width, baseH, depth]} radius={0.02} smoothness={2} position={[0, baseH / 2, 0]} castShadow receiveShadow>
+        <meshStandardMaterial color={bodyColor} roughness={0.6} />
+      </RoundedBox>
+      {/* upper section is a hollow frame (sides + top), not a solid box — otherwise the
+          bottles/glasses below would be sealed inside opaque geometry and never actually visible */}
+      {[-1, 1].map((sx) => (
+        <mesh key={sx} position={[sx * (width * 0.47 - 0.015), baseH + upperH / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.03, upperH, depth * 0.65]} />
+          <meshStandardMaterial color={bodyColor} roughness={0.6} />
+        </mesh>
+      ))}
+      <mesh position={[0, baseH + upperH - 0.015, 0]} castShadow receiveShadow>
+        <boxGeometry args={[width * 0.94, 0.03, depth * 0.65]} />
+        <meshStandardMaterial color={bodyColor} roughness={0.6} />
+      </mesh>
+      <mesh position={[0, baseH + upperH / 2, depth * 0.33 - 0.01]}>
+        <planeGeometry args={[width * 0.82, upperH * 0.88]} />
+        <meshStandardMaterial color="#cfe0e6" roughness={0.1} transparent opacity={0.28} />
+      </mesh>
+      <mesh position={[0, shelfY, 0]} castShadow receiveShadow>
+        <boxGeometry args={[width * 0.86, 0.015, depth * 0.55]} />
+        <meshStandardMaterial color={bodyColor} roughness={0.6} />
+      </mesh>
+      {Array.from({ length: 4 }, (_, i) => {
+        const x = -width * 0.32 + (i * width * 0.64) / 3;
+        const isBottle = i % 2 === 0;
+        const h = isBottle ? upperH * 0.32 : upperH * 0.15;
+        return (
+          <mesh key={i} position={[x, shelfY + h / 2, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[isBottle ? width * 0.035 : width * 0.045, isBottle ? width * 0.05 : width * 0.04, h, 12]} />
+            <meshStandardMaterial
+              color={isBottle ? "#3a5f3a" : "#dfeaee"}
+              roughness={0.2}
+              transparent
+              opacity={isBottle ? 0.85 : 0.4}
+            />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+/** French-door fridge: a wide two-door upper section over a bottom freezer drawer. */
+export function FrenchDoorFridge({ item, selected }: { item: FurnitureItem; selected: boolean }) {
+  const { width, depth, height, color } = item;
+  const bodyColor = selected ? WALL_COLOR_SELECTED : color;
+  const drawerH = height * 0.28;
+
+  return (
+    <group position={[item.position.x, 0, item.position.y]} rotation={[0, -item.rotation, 0]} userData={{ furnitureId: item.id }}>
+      <RoundedBox args={[width, height, depth]} radius={0.03} smoothness={3} position={[0, height / 2, 0]} castShadow receiveShadow>
+        <meshStandardMaterial color={bodyColor} roughness={0.3} metalness={0.4} />
+      </RoundedBox>
+      <mesh position={[0, height - drawerH / 2, depth / 2 + 0.002]} castShadow>
+        <boxGeometry args={[width * 0.94, 0.008, 0.008]} />
+        <meshStandardMaterial color="#8a8a8a" roughness={0.4} />
+      </mesh>
+      <mesh position={[0, height * 0.4, depth / 2 + 0.002]} castShadow>
+        <boxGeometry args={[width * 0.94, 0.008, 0.008]} />
+        <meshStandardMaterial color="#8a8a8a" roughness={0.4} />
+      </mesh>
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[side * width * 0.12, height - drawerH * 0.6, depth / 2 + 0.02]} castShadow>
+          <boxGeometry args={[0.02, height * 0.28, 0.03]} />
+          <meshStandardMaterial color="#c9c9c9" roughness={0.3} metalness={0.6} />
+        </mesh>
+      ))}
+      <mesh position={[0, drawerH * 0.4, depth / 2 + 0.02]} castShadow>
+        <boxGeometry args={[width * 0.5, 0.02, 0.03]} />
+        <meshStandardMaterial color="#c9c9c9" roughness={0.3} metalness={0.6} />
+      </mesh>
+    </group>
+  );
+}
+
+/**
+ * Modern drop-in kitchen sink cabinet: a base cabinet under a countertop
+ * with a recessed double-basin stainless sink — proportions are all
+ * fractions of the item's own width/depth/height (no fixed-metre offsets),
+ * so it stays visually correct across a wide range of custom sizes.
+ */
+export function KitchenSinkCabinet({ item, selected }: { item: FurnitureItem; selected: boolean }) {
+  const { width, depth, height, color } = item;
+  const cabinetColor = selected ? WALL_COLOR_SELECTED : color;
+  const topThickness = Math.min(0.04, height * 0.06);
+  const cabinetHeight = height - topThickness;
+  const basinDepth = Math.min(0.1, topThickness * 2.2);
+  const basinW = width * 0.4;
+  const basinD = depth * 0.55;
+  const frontZ = depth / 2 + 0.002;
+
+  return (
+    <group position={[item.position.x, 0, item.position.y]} rotation={[0, -item.rotation, 0]} userData={{ furnitureId: item.id }}>
+      <RoundedBox args={[width, cabinetHeight, depth]} radius={0.02} smoothness={2} position={[0, cabinetHeight / 2, 0]} castShadow receiveShadow>
+        <meshStandardMaterial color={cabinetColor} roughness={0.6} />
+      </RoundedBox>
+      <mesh position={[0, cabinetHeight / 2, frontZ]} castShadow>
+        <boxGeometry args={[0.006, cabinetHeight * 0.9, 0.006]} />
+        <meshStandardMaterial color="#2a2a2a" roughness={0.5} />
+      </mesh>
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[side * width * 0.16, cabinetHeight * 0.55, frontZ + 0.02]} castShadow>
+          <cylinderGeometry args={[0.008, 0.008, cabinetHeight * 0.16, 8]} />
+          <meshStandardMaterial color="#c9c9c9" roughness={0.3} metalness={0.6} />
+        </mesh>
+      ))}
+      <RoundedBox
+        args={[width + 0.03, topThickness, depth + 0.03]}
+        radius={Math.min(0.008, topThickness * 0.4)}
+        smoothness={2}
+        position={[0, cabinetHeight + topThickness / 2, 0]}
+        castShadow
+        receiveShadow
+      >
+        <meshStandardMaterial color="#e8e4da" roughness={0.3} />
+      </RoundedBox>
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[side * width * 0.2, cabinetHeight + topThickness - basinDepth / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[basinW, basinDepth, basinD]} />
+          <meshStandardMaterial color="#c9c9c9" roughness={0.25} metalness={0.5} />
+        </mesh>
+      ))}
+      <mesh position={[0, cabinetHeight + topThickness + 0.11, -depth * 0.3]} castShadow>
+        <cylinderGeometry args={[0.012, 0.012, 0.2, 10]} />
+        <meshStandardMaterial color="#c9c9c9" roughness={0.3} metalness={0.7} />
       </mesh>
     </group>
   );
@@ -3061,6 +3397,35 @@ export function FloorMirror({ item, selected }: { item: FurnitureItem; selected:
   );
 }
 
+/**
+ * Oval wall mirror: a flat, un-tilted disc (built as a circle, then squashed
+ * into an oval by scaling Y against the item's own width/height ratio) with
+ * a thin metal rim — mounted flush against the wall, unlike the leaning
+ * rectangular FloorMirror.
+ */
+export function OvalWallMirror({ item, selected }: { item: FurnitureItem; selected: boolean }) {
+  const { width, height, color } = item;
+  const frameColor = selected ? WALL_COLOR_SELECTED : color;
+  const radius = width / 2;
+  const squash = height / width;
+  const thickness = 0.025;
+
+  return (
+    <group position={[item.position.x, 0, item.position.y]} rotation={[0, -item.rotation, 0]} userData={{ furnitureId: item.id }}>
+      <group position={[0, height / 2, -0.015]} scale={[1, squash, 1]}>
+        <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[radius, radius, thickness, 32]} />
+          <meshStandardMaterial color={frameColor} roughness={0.35} metalness={0.5} />
+        </mesh>
+        <mesh position={[0, 0, thickness / 2 + 0.002]}>
+          <circleGeometry args={[radius * 0.9, 32]} />
+          <meshStandardMaterial color="#dfeaee" roughness={0.05} metalness={0.6} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
 /** Tall floor vase with a small cluster of thin dried branches. */
 export function FloorVase({ item, selected }: { item: FurnitureItem; selected: boolean }) {
   const { width, height, color } = item;
@@ -3950,6 +4315,24 @@ export function resolveFurnitureComponent(item: Pick<FurnitureItem, "libraryId" 
       return AirPurifier;
     case "wifi-mesh-node":
       return WifiRouter;
+
+    // kitchen / kids / decor add-ons
+    case "kitchen-base-cabinet":
+      return KitchenBaseCabinet;
+    case "kitchen-upper-cabinet":
+      return KitchenUpperCabinet;
+    case "liquor-cabinet":
+      return LiquorCabinet;
+    case "french-door-fridge":
+      return FrenchDoorFridge;
+    case "kitchen-sink-cabinet":
+      return KitchenSinkCabinet;
+    case "wall-mirror-oval":
+      return OvalWallMirror;
+    case "kids-table-chairs":
+      return KidsTableChairs;
+    case "toy-shelf":
+      return ToyShelf;
 
     default:
       if (item.category === "table" && item.height >= 0.6) return DiningTableWithChairs;

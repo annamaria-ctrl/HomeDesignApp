@@ -36,6 +36,9 @@ import {
   BookOpen,
   Gamepad2,
   Cctv,
+  ToyBrick,
+  Baby,
+  Wine,
 } from "lucide-react";
 import { useDesignStore } from "../../store/useDesignStore";
 import { useFurnitureThumbnailStore } from "../../store/useFurnitureThumbnailStore";
@@ -147,6 +150,7 @@ const LIBRARY_ITEMS: LibraryItem[] = [
   { id: "swivel-egg-chair", label: "Swivel egg chair", category: "seating", icon: Armchair, width: 0.85, depth: 0.85, height: 1.1, color: "#e8dcc0" },
   { id: "counter-stool", label: "Counter stool", category: "seating", icon: Circle, width: 0.35, depth: 0.35, height: 0.65, color: "#8a7458" },
   { id: "bench-seat-oak", label: "Bench seat – oak", category: "seating", icon: Armchair, width: 1.2, depth: 0.4, height: 0.85, color: "#c9a06a" },
+  { id: "kids-table-chairs", label: "Kids table & chairs", category: "seating", icon: Baby, width: 0.6, depth: 0.6, height: 0.48, color: "#f2e6c9" },
 
   { id: "dining-table", label: "Dining table", category: "table", icon: Table2, width: 1.6, depth: 0.9, height: 0.75, color: "#6b4c3a" },
   // seats 10 (4+4 along the sides + 1 at each end): 65cm/person along the side, 1.1m depth for comfortable end seating
@@ -206,6 +210,7 @@ const LIBRARY_ITEMS: LibraryItem[] = [
   { id: "coat-rack", label: "Coat rack", category: "storage", icon: Box, width: 0.4, depth: 0.4, height: 1.8, color: "#3a3a3a" },
   { id: "umbrella-stand", label: "Umbrella stand", category: "storage", icon: Box, width: 0.25, depth: 0.25, height: 0.5, color: "#5c5c5c" },
   { id: "blanket-basket", label: "Blanket basket", category: "storage", icon: Circle, width: 0.5, depth: 0.5, height: 0.4, color: "#c9a06a" },
+  { id: "toy-shelf", label: "Toy shelf", category: "storage", icon: ToyBrick, width: 0.9, depth: 0.3, height: 1.1, color: "#f2eee3" },
 
   { id: "kitchen-island", label: "Kitchen island", category: "kitchen", icon: ChefHat, width: 2.0, depth: 0.9, height: 0.9, color: "#3d3d3d" },
   { id: "fridge-modern", label: "Fridge", category: "kitchen", icon: Refrigerator, width: 0.75, depth: 0.7, height: 1.85, color: "#d8d8d8" },
@@ -227,6 +232,11 @@ const LIBRARY_ITEMS: LibraryItem[] = [
   { id: "kitchen-peninsula", label: "Kitchen peninsula", category: "kitchen", icon: ChefHat, width: 2.6, depth: 0.9, height: 0.9, color: "#3d3d3d" },
   { id: "undercounter-freezer", label: "Undercounter freezer", category: "kitchen", icon: Refrigerator, width: 0.6, depth: 0.65, height: 0.85, color: "#d8d8d8" },
   { id: "butcher-block-cart", label: "Butcher block cart", category: "kitchen", icon: ChefHat, width: 0.9, depth: 0.5, height: 0.9, color: "#c9a06a" },
+  { id: "kitchen-base-cabinet", label: "Kitchen base cabinet", category: "kitchen", icon: ChefHat, width: 0.6, depth: 0.6, height: 0.85, color: "#e8e4da" },
+  { id: "kitchen-upper-cabinet", label: "Kitchen upper cabinet", category: "kitchen", icon: ChefHat, width: 0.6, depth: 0.32, height: 0.7, color: "#f5f5f0" },
+  { id: "liquor-cabinet", label: "Liquor cabinet", category: "kitchen", icon: Wine, width: 0.9, depth: 0.4, height: 1.6, color: "#5c4632" },
+  { id: "french-door-fridge", label: "French door fridge", category: "kitchen", icon: Refrigerator, width: 0.9, depth: 0.75, height: 1.8, color: "#d8d8d8" },
+  { id: "kitchen-sink-cabinet", label: "Kitchen sink cabinet", category: "kitchen", icon: ChefHat, width: 0.9, depth: 0.6, height: 0.9, color: "#e8e4da" },
 
   { id: "bathtub-freestanding", label: "Freestanding bathtub", category: "bathroom", icon: Bath, width: 1.7, depth: 0.75, height: 0.55, color: "#f5f5f5" },
   { id: "vanity-sink", label: "Vanity sink", category: "bathroom", icon: Bath, width: 0.9, depth: 0.5, height: 0.85, color: "#f2f2f2" },
@@ -290,6 +300,7 @@ const LIBRARY_ITEMS: LibraryItem[] = [
   { id: "decor-sculpture-marble", label: "Decor sculpture – marble", category: "decor", icon: Diamond, width: 0.3, depth: 0.3, height: 0.5, color: "#f5f5f0" },
   { id: "runner-rug", label: "Runner rug", category: "decor", icon: Grid2x2, width: 2.4, depth: 0.8, height: 0.02, color: "#5f7a54" },
   { id: "jute-round-rug", label: "Jute round rug", category: "decor", icon: Grid2x2, width: 1.4, depth: 1.4, height: 0.02, color: "#c9a06a" },
+  { id: "wall-mirror-oval", label: "Oval wall mirror", category: "decor", icon: Frame, width: 0.6, depth: 0.03, height: 0.9, color: "#c9a86a" },
 
   { id: "tv-stand", label: "TV on stand", category: "electronics", icon: Tv, width: 1.3, depth: 0.35, height: 1.3, color: "#2a2a2a" },
   { id: "tower-speaker", label: "Tower speaker", category: "electronics", icon: Speaker, width: 0.25, depth: 0.3, height: 1.0, color: "#3a3a3a" },
