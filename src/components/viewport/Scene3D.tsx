@@ -46,7 +46,15 @@ function furnitureObstacles(items: FurnitureItem[], excludeIds: string[]): Furni
     .filter((f) => !excludeIds.includes(f.id))
     .map((f) => {
       const size = furnitureCollisionSize(f);
-      return { id: f.id, position: f.position, width: size.width, depth: size.depth, rotation: f.rotation };
+      return {
+        id: f.id,
+        position: f.position,
+        width: size.width,
+        depth: size.depth,
+        rotation: f.rotation,
+        elevation: f.elevation ?? 0,
+        height: f.height,
+      };
     });
 }
 
@@ -4678,6 +4686,8 @@ function useFurnitureInteraction(
               wallsRef.current,
               openingsRef.current,
               furnitureObstacles(furnitureRef.current, [item.id]),
+              item.elevation ?? 0,
+              item.height,
             );
             updateFurniture(item.id, { rotation, position: settled });
           }
@@ -4728,6 +4738,8 @@ function useFurnitureInteraction(
           openingsRef.current,
           obstacles,
           FURNITURE_BREAKTHROUGH_DISTANCE_M,
+          item.elevation ?? 0,
+          item.height,
         );
         snap.settled = settled;
         updateFurniture(snap.id, { position: settled });
@@ -4770,6 +4782,8 @@ function useFurnitureInteraction(
           wallsRef.current,
           openingsRef.current,
           furnitureObstacles(furnitureRef.current, []),
+          pending.elevation ?? 0,
+          pending.height,
         );
         pushHistory();
         const id = addFurniture({ ...pending, position: settled, rotation: 0 });

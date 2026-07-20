@@ -28,7 +28,15 @@ function furnitureObstacles(items: FurnitureItem[], excludeIds: string[]): Furni
     .filter((f) => !excludeIds.includes(f.id))
     .map((f) => {
       const size = furnitureCollisionSize(f);
-      return { id: f.id, position: f.position, width: size.width, depth: size.depth, rotation: f.rotation };
+      return {
+        id: f.id,
+        position: f.position,
+        width: size.width,
+        depth: size.depth,
+        rotation: f.rotation,
+        elevation: f.elevation ?? 0,
+        height: f.height,
+      };
     });
 }
 
@@ -217,7 +225,17 @@ export function PropertiesPanel() {
     const merged = { ...item, ...changes };
     const size = furnitureCollisionSize(merged);
     const obstacles = furnitureObstacles(furniture, [item.id]);
-    return resolveFurniturePlacement(merged.position, size.width, size.depth, merged.rotation, walls, openings, obstacles);
+    return resolveFurniturePlacement(
+      merged.position,
+      size.width,
+      size.depth,
+      merged.rotation,
+      walls,
+      openings,
+      obstacles,
+      merged.elevation ?? 0,
+      merged.height,
+    );
   }
 
   function applyFurnitureWidth(cm: number) {

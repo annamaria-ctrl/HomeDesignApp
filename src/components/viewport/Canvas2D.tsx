@@ -45,7 +45,15 @@ function furnitureObstacles(items: FurnitureItem[], excludeIds: string[]): Furni
     .filter((f) => !excludeIds.includes(f.id))
     .map((f) => {
       const size = furnitureCollisionSize(f);
-      return { id: f.id, position: f.position, width: size.width, depth: size.depth, rotation: f.rotation };
+      return {
+        id: f.id,
+        position: f.position,
+        width: size.width,
+        depth: size.depth,
+        rotation: f.rotation,
+        elevation: f.elevation ?? 0,
+        height: f.height,
+      };
     });
 }
 
@@ -2033,6 +2041,8 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
             wallsRef.current,
             openingsRef.current,
             furnitureObstacles(furnitureRef.current, []),
+            pending.elevation ?? 0,
+            pending.height,
           );
           pushHistory();
           const id = addFurniture({ ...pending, position: settled, rotation: 0 });
@@ -2447,6 +2457,8 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
             openingsRef.current,
             obstacles,
             FURNITURE_BREAKTHROUGH_DISTANCE_M,
+            item.elevation ?? 0,
+            item.height,
           );
           snap.settled = settled;
           updateFurniture(snap.id, { position: settled });
@@ -2491,6 +2503,8 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
             wallsRef.current,
             openingsRef.current,
             furnitureObstacles(furnitureRef.current, [item.id]),
+            item.elevation ?? 0,
+            item.height,
           );
           updateFurniture(item.id, { rotation, position: settled });
         }
@@ -3020,6 +3034,8 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
               wallsRef.current,
               openingsRef.current,
               nudgeObstacles,
+              f.elevation ?? 0,
+              f.height,
             );
             updateFurniture(f.id, { position: settled });
           }
@@ -3049,6 +3065,8 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
               wallsRef.current,
               openingsRef.current,
               furnitureObstacles(furnitureRef.current, [f.id]),
+              f.elevation ?? 0,
+              f.height,
             );
             updateFurniture(f.id, { rotation, position: settled });
           }

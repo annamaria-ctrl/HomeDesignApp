@@ -200,6 +200,9 @@ export interface FurnitureObstacle {
   width: number;
   depth: number;
   rotation: number;
+  /** Vertical range this obstacle actually occupies (elevation = its own height above the floor) — lets an item resolved with a matching range pass freely underneath/above it instead of always treating it as floor-to-ceiling solid. */
+  elevation: number;
+  height: number;
 }
 
 function furnitureOBB(f: FurnitureObstacle): OBB {
@@ -220,9 +223,13 @@ function resolveFurniturePlacementWithSegs(
   rotation: number,
   wallSegs: OBB[],
   others: FurnitureObstacle[] = [],
+  elevationM = 0,
+  heightM = Infinity,
 ): Point {
   let center = { x: position.x, y: position.y };
   const passes = 4;
+  const selfBottom = elevationM;
+  const selfTop = elevationM + heightM;
 
   for (let pass = 0; pass < passes; pass++) {
     let anyCollision = false;
@@ -238,6 +245,9 @@ function resolveFurniturePlacementWithSegs(
       self.center = center;
     }
     for (const other of others) {
+      // no vertical overlap (e.g. a wall cabinet's own range sits entirely above a
+      // base cabinet's) — footprints can freely overlap, so it never collides at all
+      if (selfBottom >= other.elevation + other.height || other.elevation >= selfTop) continue;
       const result = satOverlap(self, furnitureOBB(other));
       if (!result) continue;
       anyCollision = true;
@@ -266,9 +276,11 @@ export function resolveFurniturePlacement(
   walls: Wall[],
   openings: Opening[],
   others: FurnitureObstacle[] = [],
+  elevationM = 0,
+  heightM = Infinity,
 ): Point {
   const wallSegs = walls.flatMap((w) => wallCollisionSegments(w, openings));
-  return resolveFurniturePlacementWithSegs(position, width, depth, rotation, wallSegs, others);
+  return resolveFurniturePlacementWithSegs(position, width, depth, rotation, wallSegs, others, elevationM, heightM);
 }
 
 const SWEEP_STEP_M = 0.03; // well under any realistic wall thickness
@@ -304,6 +316,8 @@ export function sweepFurniturePlacement(
   openings: Opening[],
   others: FurnitureObstacle[] = [],
   breakthroughDistanceM = 0,
+  elevationM = 0,
+  heightM = Infinity,
 ): Point {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -311,21 +325,21 @@ export function sweepFurniturePlacement(
   // walls/openings are constant for the whole sweep, so this is computed once
   // here instead of once per step below (up to SWEEP_MAX_STEPS times)
   const wallSegs = walls.flatMap((w) => wallCollisionSegments(w, openings));
-  if (dist < 1e-9) return resolveFurniturePlacementWithSegs(to, width, depth, rotation, wallSegs, others);
+  if (dist < 1e-9) return resolveFurniturePlacementWithSegs(to, width, depth, rotation, wallSegs, others, elevationM, heightM);
 
   const steps = Math.min(SWEEP_MAX_STEPS, Math.max(1, Math.ceil(dist / SWEEP_STEP_M)));
   let current = { x: from.x, y: from.y };
   for (let i = 1; i <= steps; i++) {
     const t = i / steps;
     const candidate = { x: from.x + dx * t, y: from.y + dy * t };
-    const resolved = resolveFurniturePlacementWithSegs(candidate, width, depth, rotation, wallSegs, others);
+    const resolved = resolveFurniturePlacementWithSegs(candidate, width, depth, rotation, wallSegs, others, elevationM, heightM);
     const pushedBack = Math.abs(resolved.x - candidate.x) > 1e-6 || Math.abs(resolved.y - candidate.y) > 1e-6;
     current = resolved;
     if (pushedBack) break;
   }
 
   if (breakthroughDistanceM > 0 && distance(current, to) > breakthroughDistanceM) {
-    return resolveFurniturePlacementWithSegs(to, width, depth, rotation, wallSegs, others);
+    return resolveFurniturePlacementWithSegs(to, width, depth, rotation, wallSegs, others, elevationM, heightM);
   }
   return current;
 }
