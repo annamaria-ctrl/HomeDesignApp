@@ -4884,6 +4884,32 @@ function useFurnitureInteraction(
  * selected — a small floating handle in front of it that can be dragged to
  * free-rotate the item, the same gesture Canvas2D offers in the top-down view.
  */
+/** Watches screenshotRequest (bumped by the "Screenshot" button) the same way Canvas2D watches viewCenterRequest, and downloads a PNG of whatever's on screen when it changes. */
+function ScreenshotCapture() {
+  const { gl, scene, camera } = useThree();
+  const screenshotRequest = useDesignStore((s) => s.screenshotRequest);
+  const seenRef = useRef(screenshotRequest);
+
+  useEffect(() => {
+    if (screenshotRequest === seenRef.current) return;
+    seenRef.current = screenshotRequest;
+    // force a fresh render right before reading the buffer — the canvas's own
+    // frameloop could otherwise have last drawn a frame in a transient state
+    // (e.g. mid-damping), and gl was created with preserveDrawingBuffer so
+    // this read-back actually sees what was last drawn instead of a cleared buffer
+    gl.render(scene, camera);
+    const dataUrl = gl.domElement.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = `home-design-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [screenshotRequest, gl, scene, camera]);
+
+  return null;
+}
+
 function FurnitureInteractionLayer({
   controlsRef,
   readOnly,
@@ -5032,6 +5058,31 @@ function SceneObjects({
   const doorPatches = useMemo(() => computeDoorThresholdPatches(rooms, walls, openings), [rooms, walls, openings]);
   const ceilingHeight = useMemo(() => Math.max(0, ...walls.map((w) => w.height)), [walls]);
 
+  // the sun's shadow map is by far the most expensive thing rendered every frame (a
+  // 2048² VSM pass with a 16-sample blur) — none of that depends on the camera, only
+  // on where the light and the shadow-casting geometry actually are, so recalculating
+  // it on every single orbit/pan frame (Three's default) was most of why the 3D view
+  // stuttered while spinning the camera around a scene that wasn't otherwise changing.
+  // autoUpdate=false + a short manual re-arm window keeps it live while furniture is
+  // actually being dragged or the scene otherwise changes, and idle the rest of the time.
+  const shadowLightRef = useRef<THREE.DirectionalLight>(null);
+  useEffect(() => {
+    if (shadowLightRef.current) shadowLightRef.current.shadow.autoUpdate = false;
+  }, []);
+  useEffect(() => {
+    let framesLeft = 6;
+    let raf = 0;
+    const tick = () => {
+      const light = shadowLightRef.current;
+      if (!light) return;
+      light.shadow.needsUpdate = true;
+      framesLeft -= 1;
+      if (framesLeft > 0) raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(raf);
+  }, [walls, openings, furniture, roomFloors, showCeiling, ceilingLights, timeOfDay, lightsOn]);
+
   return (
     <>
       <color attach="background" args={[isNight ? "#0c1220" : "#f3efe4"]} />
@@ -5073,13 +5124,14 @@ function SceneObjects({
           stronger. Also much dimmer/cooler at night, same reasoning. */}
       <hemisphereLight args={isNight ? ["#1b2438", "#0d0f14", 0.15] : ["#dce8f5", "#e7ddc4", 0.55]} />
       <directionalLight
+        ref={shadowLightRef}
         position={[8, 22, 5]}
         intensity={isNight ? 0.12 : 1.7}
         color={isNight ? "#9fb3d9" : "#fff6e0"}
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[1024, 1024]}
         shadow-radius={4}
-        shadow-blurSamples={16}
+        shadow-blurSamples={8}
         shadow-bias={-0.00005}
         shadow-normalBias={0.006}
         shadow-camera-left={-18}
@@ -5201,7 +5253,12 @@ export function Scene3D({ readOnly = false }: { readOnly?: boolean } = {}) {
 
   return (
     <div className="bg-studio-bg relative h-full w-full">
-      <Canvas shadows="variance" camera={{ position: [6, 6, 6], fov: 50, near: 0.1, far: 200 }} dpr={[1, 2]}>
+      <Canvas
+        shadows="variance"
+        camera={{ position: [6, 6, 6], fov: 50, near: 0.1, far: 200 }}
+        dpr={[1, 1.5]}
+        gl={{ preserveDrawingBuffer: true }}
+      >
         <SceneObjects
           walls={walls}
           openings={openings}
@@ -5215,6 +5272,7 @@ export function Scene3D({ readOnly = false }: { readOnly?: boolean } = {}) {
         />
         <FurnitureInteractionLayer controlsRef={controlsRef} readOnly={readOnly} />
         <CameraRig walls={walls} controlsRef={controlsRef} />
+        <ScreenshotCapture />
       </Canvas>
 
       {walls.length === 0 && (
@@ -5407,7 +5465,7 @@ export function WalkthroughScene() {
           near: 0.05,
           far: 200,
         }}
-        dpr={[1, 2]}
+        dpr={[1, 1.5]}
       >
         <SceneObjects
           walls={walls}

@@ -65,6 +65,8 @@ interface FurniturePlacementState {
 /** Not part of the persisted design schema — a counter Canvas2D watches to know when to re-center/fit its camera onto the current content, bumped by loadDesign and by the manual "center view" action. */
 interface ViewControlState {
   viewCenterRequest: number;
+  /** Bumped by the 3D view's "Screenshot" button; Scene3D watches this the same way Canvas2D watches viewCenterRequest. */
+  screenshotRequest: number;
 }
 
 interface DesignActions {
@@ -113,6 +115,9 @@ interface DesignActions {
 
   /** Requests that the 2D canvas re-center/fit its camera onto the current content (also triggered automatically by loadDesign). */
   centerView: () => void;
+
+  /** Requests that the 3D view capture and download a screenshot of what's currently on screen. */
+  requestScreenshot: () => void;
 
   addFurniture: (item: Omit<FurnitureItem, "id">) => string;
   updateFurniture: (id: string, patch: Partial<Omit<FurnitureItem, "id">>) => void;
@@ -176,6 +181,7 @@ export const useDesignStore = create<DesignStore>()(
       past: [],
       future: [],
       viewCenterRequest: 0,
+      screenshotRequest: 0,
 
       pushHistory: () =>
         set((state) => ({
@@ -364,6 +370,7 @@ export const useDesignStore = create<DesignStore>()(
         })),
 
       centerView: () => set((state) => ({ viewCenterRequest: state.viewCenterRequest + 1 })),
+      requestScreenshot: () => set((state) => ({ screenshotRequest: state.screenshotRequest + 1 })),
 
       addFurniture: (item) => {
         const id = makeId("furniture");

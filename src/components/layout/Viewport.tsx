@@ -8,6 +8,7 @@ import { CeilingToggle } from "../viewport/CeilingToggle";
 import { TimeOfDayToggle } from "../viewport/TimeOfDayToggle";
 import { LightsToggle } from "../viewport/LightsToggle";
 import { CenterViewButton } from "../viewport/CenterViewButton";
+import { ScreenshotButton } from "../viewport/ScreenshotButton";
 import { Canvas2D } from "../viewport/Canvas2D";
 import { Scene3D, WalkthroughScene } from "../viewport/Scene3D";
 import { PropertiesPanel } from "../viewport/PropertiesPanel";
@@ -42,6 +43,7 @@ export function Viewport({ readOnly = false }: { readOnly?: boolean } = {}) {
         {viewMode === "3d" && <CeilingToggle />}
         {viewMode !== "2d" && <TimeOfDayToggle />}
         {viewMode !== "2d" && <LightsToggle />}
+        {viewMode === "3d" && <ScreenshotButton />}
       </div>
       {/* editing controls (size/color/rotation/etc.) never make sense when read-only — nothing in this panel is viewable-only */}
       {viewMode !== "walkthrough" && !readOnly && <PropertiesPanel />}
