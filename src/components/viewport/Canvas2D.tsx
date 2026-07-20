@@ -36,8 +36,10 @@ import {
   sweepFurniturePlacement,
   furnitureCollisionSize,
   snapFurnitureToWall,
+  snapFurnitureToWindow,
   type FurnitureObstacle,
 } from "../../lib/furnitureCollision";
+import { isCeilingHung, effectiveElevation } from "../../lib/furnitureMounting";
 
 const FURNITURE_BREAKTHROUGH_DISTANCE_M = 0.45;
 
@@ -56,6 +58,11 @@ function furnitureObstacles(items: FurnitureItem[], excludeIds: string[]): Furni
         height: f.height,
       };
     });
+}
+
+/** Same formula Scene3D uses for the room's ceiling mesh — the tallest of any drawn wall stands in for "the ceiling" wherever a ceiling-hung item's real vertical position needs figuring out. */
+function currentCeilingHeight(walls: Wall[]): number {
+  return Math.max(0, ...walls.map((w) => w.height));
 }
 
 const BASE_PPM = 50; // pixels per meter at zoom = 1
@@ -2045,7 +2052,7 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
             wallsRef.current,
             openingsRef.current,
             furnitureObstacles(furnitureRef.current, []),
-            pending.elevation ?? 0,
+            effectiveElevation(pending, currentCeilingHeight(wallsRef.current)),
             pending.height,
           );
           pushHistory();
@@ -2454,7 +2461,11 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
           if (!item) continue;
           const desired = { x: snap.position.x + delta.x, y: snap.position.y + delta.y };
           const size = furnitureCollisionSize(item);
-          const wallSnap = snap.id === singleDragId ? snapFurnitureToWall(desired, size.depth, wallsRef.current) : null;
+          const wallSnap =
+            snap.id === singleDragId
+              ? (isCeilingHung(item.libraryId) && snapFurnitureToWindow(desired, size.depth, wallsRef.current, openingsRef.current)) ||
+                snapFurnitureToWall(desired, size.depth, wallsRef.current)
+              : null;
           const rotation = wallSnap?.rotation ?? item.rotation;
           const target = wallSnap?.position ?? desired;
           const settled = sweepFurniturePlacement(
@@ -2467,7 +2478,7 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
             openingsRef.current,
             obstacles,
             FURNITURE_BREAKTHROUGH_DISTANCE_M,
-            item.elevation ?? 0,
+            effectiveElevation(item, currentCeilingHeight(wallsRef.current)),
             item.height,
           );
           snap.settled = settled;
@@ -2513,7 +2524,7 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
             wallsRef.current,
             openingsRef.current,
             furnitureObstacles(furnitureRef.current, [item.id]),
-            item.elevation ?? 0,
+            effectiveElevation(item, currentCeilingHeight(wallsRef.current)),
             item.height,
           );
           updateFurniture(item.id, { rotation, position: settled });
@@ -2696,7 +2707,11 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
       }
 
       if (activeToolRef.current === "furniture" && pendingFurnitureRef.current) {
-        const wallSnap = snapFurnitureToWall(rawWorld, pendingFurnitureRef.current.depth, wallsRef.current);
+        const pendingDepth = pendingFurnitureRef.current.depth;
+        const wallSnap =
+          (isCeilingHung(pendingFurnitureRef.current.libraryId) &&
+            snapFurnitureToWindow(rawWorld, pendingDepth, wallsRef.current, openingsRef.current)) ||
+          snapFurnitureToWall(rawWorld, pendingDepth, wallsRef.current);
         if (wallSnap) {
           furniturePreviewRef.current = { point: wallSnap.position, rotation: wallSnap.rotation };
         } else {
@@ -3050,7 +3065,7 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
               wallsRef.current,
               openingsRef.current,
               nudgeObstacles,
-              f.elevation ?? 0,
+              effectiveElevation(f, currentCeilingHeight(wallsRef.current)),
               f.height,
             );
             updateFurniture(f.id, { position: settled });
@@ -3081,7 +3096,7 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
               wallsRef.current,
               openingsRef.current,
               furnitureObstacles(furnitureRef.current, [f.id]),
-              f.elevation ?? 0,
+              effectiveElevation(f, currentCeilingHeight(wallsRef.current)),
               f.height,
             );
             updateFurniture(f.id, { rotation, position: settled });

@@ -21,6 +21,7 @@ import { computeAlignmentDeltas, type AlignMode, type Alignable } from "../../li
 import { computeInnerDimension } from "../../lib/innerDimension";
 import { computeRooms } from "../../lib/roomDetection";
 import { resolveFurniturePlacement, furnitureCollisionSize, type FurnitureObstacle } from "../../lib/furnitureCollision";
+import { isCeilingHung } from "../../lib/furnitureMounting";
 import type { FurnitureItem } from "../../types";
 
 function furnitureObstacles(items: FurnitureItem[], excludeIds: string[]): FurnitureObstacle[] {
@@ -216,6 +217,10 @@ export function PropertiesPanel() {
   const furnitureDepthCm = selectedFurniture.length > 0 ? Math.round(selectedFurniture[0].depth * 100) : 0;
   const furnitureHeightCm = selectedFurniture.length > 0 ? Math.round(selectedFurniture[0].height * 100) : 0;
   const furnitureElevationCm = selectedFurniture.length > 0 ? Math.round((selectedFurniture[0].elevation ?? 0) * 100) : 0;
+  // curtains/drapes always hang from the ceiling down — their vertical position is
+  // derived automatically (see Scene3D's effectiveElevation), so the Elevation field
+  // would just be dead weight, and "Height" reads more sensibly relabeled as "Length"
+  const selectedAllCeilingHung = selectedFurniture.length > 0 && selectedFurniture.every((f) => isCeilingHung(f.libraryId));
   const furnitureColor = selectedFurniture.length > 0 ? selectedFurniture[0].color : "#8b7355";
 
   function resolveGeometryChange(
@@ -441,19 +446,23 @@ export function PropertiesPanel() {
             onCommit={applyFurnitureDepth}
           />
           <NumberField
-            label="Height"
+            label={selectedAllCeilingHung ? "Length" : "Height"}
             valueCm={furnitureHeightCm}
             min={MIN_FURNITURE_SIZE_CM}
             max={MAX_FURNITURE_HEIGHT_CM}
             onCommit={applyFurnitureHeight}
           />
-          <NumberField
-            label="Elevation"
-            valueCm={furnitureElevationCm}
-            min={0}
-            max={MAX_FURNITURE_HEIGHT_CM}
-            onCommit={applyFurnitureElevation}
-          />
+          {selectedAllCeilingHung ? (
+            <p className="text-studio-ink-faint text-[10.5px] leading-snug">Hangs from the ceiling automatically — adjust Length above to change how far down it reaches.</p>
+          ) : (
+            <NumberField
+              label="Elevation"
+              valueCm={furnitureElevationCm}
+              min={0}
+              max={MAX_FURNITURE_HEIGHT_CM}
+              onCommit={applyFurnitureElevation}
+            />
+          )}
           <div className="flex items-center gap-2">
             <span className="text-studio-ink-soft flex-1">Color</span>
             <input

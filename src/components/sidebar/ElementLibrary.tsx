@@ -39,6 +39,7 @@ import {
   ToyBrick,
   Baby,
   Wine,
+  Blinds,
 } from "lucide-react";
 import { useDesignStore } from "../../store/useDesignStore";
 import { useFurnitureThumbnailStore } from "../../store/useFurnitureThumbnailStore";
@@ -303,6 +304,8 @@ const LIBRARY_ITEMS: LibraryItem[] = [
   { id: "runner-rug", label: "Runner rug", category: "decor", icon: Grid2x2, width: 2.4, depth: 0.8, height: 0.02, color: "#5f7a54" },
   { id: "jute-round-rug", label: "Jute round rug", category: "decor", icon: Grid2x2, width: 1.4, depth: 1.4, height: 0.02, color: "#c9a06a" },
   { id: "wall-mirror-oval", label: "Oval wall mirror", category: "decor", icon: Frame, width: 0.6, depth: 0.03, height: 0.9, color: "#c9a86a", elevation: 1.0 },
+  { id: "curtain-panel", label: "Curtain panel", category: "decor", icon: Blinds, width: 1.6, depth: 0.15, height: 2.2, color: "#8a7458" },
+  { id: "sheer-curtain", label: "Sheer curtain", category: "decor", icon: Blinds, width: 1.4, depth: 0.05, height: 2.2, color: "#f2ece0" },
 
   { id: "tv-stand", label: "TV on stand", category: "electronics", icon: Tv, width: 1.3, depth: 0.35, height: 1.3, color: "#2a2a2a" },
   { id: "tower-speaker", label: "Tower speaker", category: "electronics", icon: Speaker, width: 0.25, depth: 0.3, height: 1.0, color: "#3a3a3a" },

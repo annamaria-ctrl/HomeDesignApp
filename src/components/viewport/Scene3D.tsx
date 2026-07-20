@@ -27,6 +27,7 @@ import {
   furnitureCollisionSize,
   type FurnitureObstacle,
 } from "../../lib/furnitureCollision";
+import { effectiveElevation } from "../../lib/furnitureMounting";
 
 const FURNITURE_BREAKTHROUGH_DISTANCE_M = 0.45;
 const CURSOR_RAYCAST_THROTTLE_MS = 80;
@@ -56,6 +57,11 @@ function furnitureObstacles(items: FurnitureItem[], excludeIds: string[]): Furni
         height: f.height,
       };
     });
+}
+
+/** Same formula SceneObjects uses for the room's ceiling mesh — the tallest of any drawn wall stands in for "the ceiling" everywhere a ceiling-hung item's real vertical position needs figuring out. */
+function currentCeilingHeight(walls: Wall[]): number {
+  return Math.max(0, ...walls.map((w) => w.height));
 }
 
 const WALL_COLOR = "#efe7d6";
@@ -3472,6 +3478,72 @@ export function OvalWallMirror({ item, selected }: { item: FurnitureItem; select
   );
 }
 
+/**
+ * Heavy drape curtains: a rod with end finials over a pair of full-length
+ * fabric panels, each built from a few overlapping vertical strips (offset
+ * slightly front/back) so the fabric reads as gently pleated instead of a
+ * flat slab. `height` is the curtain's own length — how far it hangs down
+ * from wherever it's mounted, not a height-above-floor.
+ */
+export function CurtainPanel({ item, selected }: { item: FurnitureItem; selected: boolean }) {
+  const { width, depth, height, color } = item;
+  const fabricColor = selected ? WALL_COLOR_SELECTED : color;
+  const rodR = 0.012;
+  const panelGap = width * 0.14;
+  const panelW = (width - panelGap) / 2;
+  const stripCount = 5;
+
+  return (
+    <group position={[item.position.x, 0, item.position.y]} rotation={[0, -item.rotation, 0]} userData={{ furnitureId: item.id }}>
+      <mesh position={[0, height - 0.03, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[rodR, rodR, width + 0.15, 12]} />
+        <meshStandardMaterial color="#3a3a3a" roughness={0.4} metalness={0.6} />
+      </mesh>
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[side * (width / 2 + 0.075), height - 0.03, 0]} castShadow>
+          <sphereGeometry args={[0.025, 12, 12]} />
+          <meshStandardMaterial color="#3a3a3a" roughness={0.3} metalness={0.6} />
+        </mesh>
+      ))}
+      {[-1, 1].map((side) => (
+        <group key={side} position={[side * (panelGap / 2 + panelW / 2), 0, 0]}>
+          {Array.from({ length: stripCount }, (_, i) => {
+            const stripW = panelW / stripCount;
+            const x = -panelW / 2 + stripW * (i + 0.5);
+            const waveZ = (i % 2 === 0 ? 1 : -1) * depth * 0.5;
+            return (
+              <mesh key={i} position={[x, height * 0.47, waveZ]} castShadow receiveShadow>
+                <boxGeometry args={[stripW * 0.96, height * 0.94, depth * 0.5]} />
+                <meshStandardMaterial color={fabricColor} roughness={0.95} />
+              </mesh>
+            );
+          })}
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/** Sheer curtain: a single light, semi-transparent panel on a slim rod — meant to hang alone or layered in front of heavier drapes. */
+export function SheerCurtain({ item, selected }: { item: FurnitureItem; selected: boolean }) {
+  const { width, height, color } = item;
+  const fabricColor = selected ? WALL_COLOR_SELECTED : color;
+  const rodR = 0.008;
+
+  return (
+    <group position={[item.position.x, 0, item.position.y]} rotation={[0, -item.rotation, 0]} userData={{ furnitureId: item.id }}>
+      <mesh position={[0, height - 0.02, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[rodR, rodR, width + 0.1, 10]} />
+        <meshStandardMaterial color="#c9c9c9" roughness={0.4} metalness={0.5} />
+      </mesh>
+      <mesh position={[0, height * 0.48, 0]} receiveShadow>
+        <planeGeometry args={[width * 0.96, height * 0.94]} />
+        <meshStandardMaterial color={fabricColor} roughness={0.9} transparent opacity={0.5} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+  );
+}
+
 /** Tall floor vase with a small cluster of thin dried branches. */
 export function FloorVase({ item, selected }: { item: FurnitureItem; selected: boolean }) {
   const { width, height, color } = item;
@@ -4379,6 +4451,10 @@ export function resolveFurnitureComponent(item: Pick<FurnitureItem, "libraryId" 
       return KidsTableChairs;
     case "toy-shelf":
       return ToyShelf;
+    case "curtain-panel":
+      return CurtainPanel;
+    case "sheer-curtain":
+      return SheerCurtain;
 
     default:
       if (item.category === "table" && item.height >= 0.6) return DiningTableWithChairs;
@@ -4724,7 +4800,7 @@ function useFurnitureInteraction(
               wallsRef.current,
               openingsRef.current,
               furnitureObstacles(furnitureRef.current, [item.id]),
-              item.elevation ?? 0,
+              effectiveElevation(item, currentCeilingHeight(wallsRef.current)),
               item.height,
             );
             updateFurniture(item.id, { rotation, position: settled });
@@ -4776,7 +4852,7 @@ function useFurnitureInteraction(
           openingsRef.current,
           obstacles,
           FURNITURE_BREAKTHROUGH_DISTANCE_M,
-          item.elevation ?? 0,
+          effectiveElevation(item, currentCeilingHeight(wallsRef.current)),
           item.height,
         );
         snap.settled = settled;
@@ -4820,7 +4896,7 @@ function useFurnitureInteraction(
           wallsRef.current,
           openingsRef.current,
           furnitureObstacles(furnitureRef.current, []),
-          pending.elevation ?? 0,
+          effectiveElevation(pending, currentCeilingHeight(wallsRef.current)),
           pending.height,
         );
         pushHistory();
@@ -5210,9 +5286,12 @@ function SceneObjects({
         const Model = resolveFurnitureComponent(item) ?? FurnitureMesh;
         // a pure Y offset on a wrapping group — every model's own root group
         // already positions itself in X/Z from item.position, so this composes
-        // cleanly on top without any model needing to know about elevation itself
+        // cleanly on top without any model needing to know about elevation itself.
+        // Ceiling-hung items (curtains) ignore their own elevation field entirely —
+        // their vertical position always follows the room's actual ceiling height
+        const elevation = effectiveElevation(item, ceilingHeight);
         return (
-          <group key={item.id} position={[0, item.elevation ?? 0, 0]}>
+          <group key={item.id} position={[0, elevation, 0]}>
             <Model item={item} selected={selected} />
           </group>
         );

@@ -354,33 +354,23 @@ export interface FurnitureWallSnap {
 }
 
 /**
- * If `point` is within snapping range of a wall, returns the position+rotation
- * that would sit the item's back flush against that wall's face (centered
- * on the nearest point along it), oriented so its front (local +Y, the same
- * direction Canvas2D's chevron and the rotate handle already treat as
- * "front") faces away from the wall into whichever side `point` is actually
- * on — mirrors placing, upper cabinets, headboards, etc. all want exactly
- * this "shove it against the wall" gesture instead of free-form dragging
- * pixel-perfect alignment by hand. Returns null when nothing is close enough.
+ * The shared "shove it flush against this wall" math: given a wall and an
+ * anchor point already lying on its centerline (the closest point on the
+ * wall for plain furniture, or a window's own center for curtains), plus a
+ * reference point to pick which side of the wall to land on, returns the
+ * flush position + the rotation that turns the item's front (local +Y, same
+ * convention the chevron and rotate handle already use) to face into that
+ * side's room.
  */
-export function snapFurnitureToWall(point: Point, depth: number, walls: Wall[]): FurnitureWallSnap | null {
-  let best: { wall: Wall; point: Point; dist: number } | null = null;
-  for (const wall of walls) {
-    const proj = projectPointOnSegment(point, wall.start, wall.end);
-    if (proj.distance > FURNITURE_WALL_SNAP_THRESHOLD_M) continue;
-    if (!best || proj.distance < best.dist) best = { wall, point: proj.point, dist: proj.distance };
-  }
-  if (!best) return null;
-
-  const { wall, point: onWall } = best;
+function flushAgainstWall(wall: Wall, onWall: Point, referencePoint: Point, depth: number): FurnitureWallSnap {
   const dx = wall.end.x - wall.start.x;
   const dy = wall.end.y - wall.start.y;
   const len = Math.hypot(dx, dy) || 1;
   let nx = -dy / len;
   let ny = dx / len;
-  // pick whichever side of the wall's centerline `point` is actually on, so it
-  // snaps into the room the cursor is in rather than flipping to the far side
-  const toPoint = { x: point.x - onWall.x, y: point.y - onWall.y };
+  // pick whichever side of the wall's centerline the reference point is actually
+  // on, so it snaps into the room the cursor is in rather than flipping to the far side
+  const toPoint = { x: referencePoint.x - onWall.x, y: referencePoint.y - onWall.y };
   if (toPoint.x * nx + toPoint.y * ny < 0) {
     nx = -nx;
     ny = -ny;
@@ -394,4 +384,54 @@ export function snapFurnitureToWall(point: Point, depth: number, walls: Wall[]):
     rotation: Math.atan2(-nx, ny),
     wallId: wall.id,
   };
+}
+
+/**
+ * If `point` is within snapping range of a wall, returns the position+rotation
+ * that would sit the item's back flush against that wall's face (centered
+ * on the nearest point along it), oriented so its front faces away from the
+ * wall into whichever side `point` is actually on — mirrors placing, upper
+ * cabinets, headboards, etc. all want exactly this "shove it against the
+ * wall" gesture instead of free-form dragging pixel-perfect alignment by
+ * hand. Returns null when nothing is close enough.
+ */
+export function snapFurnitureToWall(point: Point, depth: number, walls: Wall[]): FurnitureWallSnap | null {
+  let best: { wall: Wall; point: Point; dist: number } | null = null;
+  for (const wall of walls) {
+    const proj = projectPointOnSegment(point, wall.start, wall.end);
+    if (proj.distance > FURNITURE_WALL_SNAP_THRESHOLD_M) continue;
+    if (!best || proj.distance < best.dist) best = { wall, point: proj.point, dist: proj.distance };
+  }
+  if (!best) return null;
+  return flushAgainstWall(best.wall, best.point, point, depth);
+}
+
+const CURTAIN_WINDOW_SNAP_THRESHOLD_M = 0.7; // generous — you're aiming for a specific window, not just any point on the wall
+
+/**
+ * Same idea as snapFurnitureToWall, but seeks out the nearest *window*
+ * opening (on any wall) and snaps flush against that window's own wall,
+ * centered on the window along it — curtains/drapes want to hang centered
+ * on the window they're dressing, not just wherever along the wall the
+ * cursor happens to be.
+ */
+export function snapFurnitureToWindow(point: Point, depth: number, walls: Wall[], openings: Opening[]): FurnitureWallSnap | null {
+  let best: { wall: Wall; point: Point; dist: number } | null = null;
+  for (const wall of walls) {
+    const dx = wall.end.x - wall.start.x;
+    const dy = wall.end.y - wall.start.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    for (const opening of openings) {
+      if (opening.wallId !== wall.id || opening.type !== "window") continue;
+      const centerAlongWall = opening.offset + opening.width / 2;
+      const windowCenter = { x: wall.start.x + ux * centerAlongWall, y: wall.start.y + uy * centerAlongWall };
+      const dist = distance(point, windowCenter);
+      if (dist > CURTAIN_WINDOW_SNAP_THRESHOLD_M) continue;
+      if (!best || dist < best.dist) best = { wall, point: windowCenter, dist };
+    }
+  }
+  if (!best) return null;
+  return flushAgainstWall(best.wall, best.point, point, depth);
 }
