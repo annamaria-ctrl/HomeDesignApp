@@ -80,6 +80,7 @@ const COLOR_BRASS = "#a6793f";
 const COLOR_BRASS_DARK = "#8a5f2e";
 const COLOR_GLASS = "#5a8aa8";
 const COLOR_HANDLE = "#2f6fed"; // drag handles at wall/measurement endpoints — a distinct blue so they read as grabbable, separate from the clay selection color
+const COLOR_SPACING = "#e8336d"; // Alt-hover spacing readout (Figma-style) — a hot pink so it never gets mistaken for a persistent measurement or the selection outline
 
 const TOOL_SHORTCUTS: Record<string, ToolType> = {
   v: "select",
@@ -699,6 +700,99 @@ function furnitureCorners(item: FurnitureItem): Point[] {
   }));
 }
 
+interface Aabb {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+function aabbFromCorners(corners: Point[]): Aabb {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const p of corners) {
+    minX = Math.min(minX, p.x);
+    maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y);
+    maxY = Math.max(maxY, p.y);
+  }
+  return { minX, maxX, minY, maxY };
+}
+
+/** A wall's own axis-aligned bounding box, in world units, accounting for its thickness (not just the centerline). */
+function wallAabb(wall: Wall): Aabb {
+  const dx = wall.end.x - wall.start.x;
+  const dy = wall.end.y - wall.start.y;
+  const len = Math.hypot(dx, dy) || 0.001;
+  const nx = (-dy / len) * (wall.thickness / 2);
+  const ny = (dx / len) * (wall.thickness / 2);
+  return aabbFromCorners([
+    { x: wall.start.x + nx, y: wall.start.y + ny },
+    { x: wall.start.x - nx, y: wall.start.y - ny },
+    { x: wall.end.x + nx, y: wall.end.y + ny },
+    { x: wall.end.x - nx, y: wall.end.y - ny },
+  ]);
+}
+
+/** A single Figma-style spacing tag: a line with end-ticks and a solid pill label, between two already-projected screen points. */
+function drawSpacingTag(ctx: CanvasRenderingContext2D, p1: Point, p2: Point, label: string) {
+  const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1;
+  const normal = { x: -(p2.y - p1.y) / segLen, y: (p2.x - p1.x) / segLen };
+  const tickLen = 5;
+
+  ctx.strokeStyle = COLOR_SPACING;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(p1.x, p1.y);
+  ctx.lineTo(p2.x, p2.y);
+  ctx.stroke();
+  for (const p of [p1, p2]) {
+    ctx.beginPath();
+    ctx.moveTo(p.x - normal.x * tickLen, p.y - normal.y * tickLen);
+    ctx.lineTo(p.x + normal.x * tickLen, p.y + normal.y * tickLen);
+    ctx.stroke();
+  }
+
+  const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+  ctx.font = "600 11px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const labelWidth = ctx.measureText(label).width;
+  ctx.fillStyle = COLOR_SPACING;
+  ctx.fillRect(mid.x - labelWidth / 2 - 5, mid.y - 9, labelWidth + 10, 18);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(label, mid.x, mid.y);
+}
+
+/**
+ * Figma's Alt-hover gap readout: the horizontal gap only makes sense while the
+ * two boxes still overlap vertically (otherwise "distance" is ambiguous — it'd
+ * have to go diagonal), and vice versa for the vertical gap — so each axis is
+ * shown independently, and only when that axis's boxes don't already overlap.
+ */
+function drawSpacingBetween(ctx: CanvasRenderingContext2D, a: Aabb, b: Aabb, cam: CameraState, size: { width: number; height: number }) {
+  const overlapY = Math.min(a.maxY, b.maxY) - Math.max(a.minY, b.minY);
+  const overlapX = Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX);
+
+  if (overlapY > 0 && (a.maxX <= b.minX || b.maxX <= a.minX)) {
+    const [left, right] = a.maxX <= b.minX ? [a, b] : [b, a];
+    const midY = Math.max(a.minY, b.minY) + overlapY / 2;
+    const p1 = worldToScreen({ x: left.maxX, y: midY }, cam, size);
+    const p2 = worldToScreen({ x: right.minX, y: midY }, cam, size);
+    drawSpacingTag(ctx, p1, p2, formatLength(right.minX - left.maxX));
+  }
+
+  if (overlapX > 0 && (a.maxY <= b.minY || b.maxY <= a.minY)) {
+    const [top, bottom] = a.maxY <= b.minY ? [a, b] : [b, a];
+    const midX = Math.max(a.minX, b.minX) + overlapX / 2;
+    const p1 = worldToScreen({ x: midX, y: top.maxY }, cam, size);
+    const p2 = worldToScreen({ x: midX, y: bottom.minY }, cam, size);
+    drawSpacingTag(ctx, p1, p2, formatLength(bottom.minY - top.maxY));
+  }
+}
+
 const FURNITURE_ROTATE_HANDLE_GAP_PX = 22;
 
 /** World position of the little rotate-handle floating above a selected furniture item's top edge. */
@@ -908,6 +1002,10 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
   const roomFloorPolygonsRef = useRef<DetectedRoom[]>([]);
   const doorPatchesRef = useRef<DoorThresholdPatch[]>([]);
   const hoveredRoomKeyRef = useRef<string | null>(null);
+  // Alt-hover spacing readout (Figma-style): which furniture/wall the cursor is over
+  // while Alt is held and a single furniture item is selected — cleared whenever
+  // either condition stops holding, so the overlay only ever shows a real gap
+  const altSpacingHoverRef = useRef<{ selectedId: string; targetKind: "furniture" | "wall"; targetId: string } | null>(null);
   const roomImageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
   // both are pure functions of `walls` alone, but render() runs on essentially
   // every mousemove (panning, any drag, hover) — recomputing an O(wallCount²)
@@ -1259,6 +1357,25 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
         ctx.lineWidth = 1.5;
         ctx.strokeStyle = COLOR_PAPER;
         ctx.stroke();
+      }
+    }
+
+    // --- Alt-hover spacing readout (Figma-style gap between the selected item and whatever's under the cursor) ---
+    if (altSpacingHoverRef.current) {
+      const hover = altSpacingHoverRef.current;
+      const selected = furnitureRef.current.find((f) => f.id === hover.selectedId);
+      const targetAabb =
+        hover.targetKind === "furniture"
+          ? (() => {
+              const target = furnitureRef.current.find((f) => f.id === hover.targetId);
+              return target ? aabbFromCorners(furnitureCorners(target)) : null;
+            })()
+          : (() => {
+              const wall = wallsRef.current.find((w) => w.id === hover.targetId);
+              return wall ? wallAabb(wall) : null;
+            })();
+      if (selected && targetAabb) {
+        drawSpacingBetween(ctx, aabbFromCorners(furnitureCorners(selected)), targetAabb, cam, { width, height });
       }
     }
 
@@ -2558,6 +2675,27 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
         const gridPoint = snapPointToGrid(rawWorld, gridSizeMRef.current);
         const thresholdWorld = ENDPOINT_SNAP_PX / (BASE_PPM * cam.zoom);
         furniturePreviewRef.current = distance(rawWorld, gridPoint) <= thresholdWorld ? gridPoint : rawWorld;
+      }
+
+      // Alt-hover spacing readout (Figma-style): with exactly one furniture item
+      // selected, holding Alt and hovering another item or a wall shows the gap
+      // between them — cleared the moment either condition isn't met anymore
+      if (activeToolRef.current === "select" && e.altKey && selectedIdsRef.current.length === 1) {
+        const selected = furnitureRef.current.find((f) => f.id === selectedIdsRef.current[0]);
+        const hitFurniture = selected
+          ? hitTestFurniture(
+              rawWorld,
+              furnitureRef.current.filter((f) => f.id !== selected.id),
+            )
+          : null;
+        if (selected && hitFurniture) {
+          altSpacingHoverRef.current = { selectedId: selected.id, targetKind: "furniture", targetId: hitFurniture.id };
+        } else {
+          const hitWall = selected ? hitTestWall(rawWorld, wallsRef.current) : null;
+          altSpacingHoverRef.current = selected && hitWall ? { selectedId: selected.id, targetKind: "wall", targetId: hitWall.id } : null;
+        }
+      } else {
+        altSpacingHoverRef.current = null;
       }
 
       render();
