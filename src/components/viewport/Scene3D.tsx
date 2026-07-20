@@ -1704,24 +1704,62 @@ export function Crib({ item, selected }: { item: FurnitureItem; selected: boolea
   );
 }
 
-/** Freestanding double-door wardrobe: a plain cabinet body plus a center seam and a pair of handles standing in for the doors. */
+/**
+ * Freestanding double-door wardrobe: a recessed plinth, a cornice cap, two
+ * raised shaker-style door panels with a seam between them, and — only for
+ * an actual clothes wardrobe/armoire, not the pantry/spice-rack/linen-tower
+ * catalog entries that reuse this same shape — a mirror set into one door,
+ * the single most obvious tell that reads as "wardrobe" rather than a plain box.
+ */
 export function ModernWardrobe({ item, selected }: { item: FurnitureItem; selected: boolean }) {
   const { width, depth, height, color } = item;
   const bodyColor = selected ? WALL_COLOR_SELECTED : color;
-  const handleY = height * 0.55;
+  const plinthH = Math.min(0.08, height * 0.06);
+  const corniceH = Math.min(0.04, height * 0.04);
+  const doorH = height - plinthH - corniceH;
+  const handleY = plinthH + doorH * 0.52;
+  const frontZ = depth / 2 + 0.002;
+  const doorPanelW = width * 0.4;
+  const isClothesWardrobe = item.libraryId === "wardrobe-modern" || item.libraryId === "armoire";
 
   return (
     <group position={[item.position.x, 0, item.position.y]} rotation={[0, -item.rotation, 0]} userData={{ furnitureId: item.id }}>
-      <RoundedBox args={[width, height, depth]} radius={0.02} smoothness={2} position={[0, height / 2, 0]} castShadow receiveShadow>
+      <mesh position={[0, plinthH / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[width * 0.94, plinthH, depth * 0.9]} />
+        <meshStandardMaterial color="#2a2a2a" roughness={0.6} />
+      </mesh>
+      <RoundedBox args={[width, doorH, depth]} radius={0.015} smoothness={2} position={[0, plinthH + doorH / 2, 0]} castShadow receiveShadow>
         <meshStandardMaterial color={bodyColor} roughness={0.7} />
       </RoundedBox>
-      <mesh position={[0, height / 2, depth / 2 + 0.002]} castShadow>
-        <boxGeometry args={[0.006, height * 0.92, 0.006]} />
-        <meshStandardMaterial color="#2a2a2a" roughness={0.5} />
+      <RoundedBox
+        args={[width + 0.02, corniceH, depth + 0.02]}
+        radius={Math.min(0.01, corniceH * 0.4)}
+        smoothness={2}
+        position={[0, plinthH + doorH + corniceH / 2, 0]}
+        castShadow
+        receiveShadow
+      >
+        <meshStandardMaterial color={bodyColor} roughness={0.6} />
+      </RoundedBox>
+      <mesh position={[0, plinthH + doorH / 2, frontZ]} castShadow>
+        <boxGeometry args={[0.008, doorH * 0.94, 0.006]} />
+        <meshStandardMaterial color="#1c1c1c" roughness={0.5} />
       </mesh>
       {[-1, 1].map((side) => (
-        <mesh key={side} position={[side * width * 0.14, handleY, depth / 2 + 0.02]} castShadow>
-          <cylinderGeometry args={[0.008, 0.008, height * 0.16, 8]} />
+        <mesh key={side} position={[side * width * 0.24, plinthH + doorH * 0.5, frontZ]} castShadow receiveShadow>
+          <boxGeometry args={[doorPanelW, doorH * 0.86, 0.004]} />
+          <meshStandardMaterial color={bodyColor} roughness={0.65} />
+        </mesh>
+      ))}
+      {isClothesWardrobe && (
+        <mesh position={[-width * 0.24, plinthH + doorH * 0.52, frontZ + 0.003]}>
+          <planeGeometry args={[doorPanelW * 0.8, doorH * 0.7]} />
+          <meshStandardMaterial color="#dfeaee" roughness={0.05} metalness={0.6} />
+        </mesh>
+      )}
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[side * width * 0.06, handleY, frontZ + 0.015]} castShadow>
+          <cylinderGeometry args={[0.008, 0.008, doorH * 0.16, 8]} />
           <meshStandardMaterial color="#c9a86a" roughness={0.3} metalness={0.6} />
         </mesh>
       ))}
