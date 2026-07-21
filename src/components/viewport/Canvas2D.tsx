@@ -2040,6 +2040,18 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
       if (activeToolRef.current === "furniture") {
         const pending = pendingFurnitureRef.current;
         if (pending) {
+          // clicking an item that's already there is almost always an attempt to
+          // grab/select it, not to stamp a duplicate on top — repeat-placement
+          // (clicking open floor while still armed) is unaffected
+          const existingHit = hitTestFurniture(rawWorld, furnitureRef.current);
+          if (existingHit) {
+            setActiveTool("select");
+            setPendingFurniture(null);
+            setSelection([existingHit.id]);
+            selectedIdsRef.current = [existingHit.id];
+            render();
+            return;
+          }
           const preview = furniturePreviewRef.current;
           const point = preview?.point ?? rawWorld;
           const rotation = preview?.rotation ?? 0;
@@ -3162,6 +3174,7 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
     toggleSelection,
     clearSelection,
     setActiveTool,
+    setPendingFurniture,
     pushHistory,
     undo,
     redo,

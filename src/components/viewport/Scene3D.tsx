@@ -4631,6 +4631,8 @@ function useFurnitureInteraction(
   const setSelection = useDesignStore((s) => s.setSelection);
   const toggleSelection = useDesignStore((s) => s.toggleSelection);
   const pushHistory = useDesignStore((s) => s.pushHistory);
+  const setActiveTool = useDesignStore((s) => s.setActiveTool);
+  const setPendingFurniture = useDesignStore((s) => s.setPendingFurniture);
 
   const activeToolRef = useRef(activeTool);
   const pendingRef = useRef(pendingFurniture);
@@ -4686,7 +4688,15 @@ function useFurnitureInteraction(
     (clientX: number, clientY: number) => {
       raycaster.setFromCamera(toNDC(clientX, clientY), camera);
       const hits = raycaster.intersectObjects(scene.children, true);
-      return hits.length > 0 ? findFurnitureId(hits[0].object) : null;
+      // skip past hits that aren't furniture at all (floor, walls, the
+      // rotate handle, the semi-transparent placement ghost that follows the
+      // cursor while a new item is armed) instead of only ever looking at
+      // the single closest hit, which the ghost preview otherwise shadows
+      for (const hit of hits) {
+        const id = findFurnitureId(hit.object);
+        if (id) return id;
+      }
+      return null;
     },
     [camera, raycaster, scene, toNDC],
   );
@@ -4884,6 +4894,16 @@ function useFurnitureInteraction(
       if (moved > CLICK_TOLERANCE_PX || wasDragging) return;
 
       if (activeToolRef.current === "furniture" && pendingRef.current) {
+        // clicking an item that's already there is almost always an attempt to
+        // select it, not to stamp a duplicate on top — repeat-placement
+        // (clicking open floor while still armed) is unaffected
+        const existingHitId = raycastFurniture(e.clientX, e.clientY);
+        if (existingHitId) {
+          setActiveTool("select");
+          setPendingFurniture(null);
+          setSelection([existingHitId]);
+          return;
+        }
         const point = raycastFloor(e.clientX, e.clientY);
         if (!point) return;
         const pending = pendingRef.current;
@@ -4947,6 +4967,8 @@ function useFurnitureInteraction(
     removeElements,
     setSelection,
     toggleSelection,
+    setActiveTool,
+    setPendingFurniture,
     pushHistory,
     controlsRef,
   ]);
