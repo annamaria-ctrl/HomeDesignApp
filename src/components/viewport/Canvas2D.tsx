@@ -1059,7 +1059,6 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
   const setActiveTool = useDesignStore((s) => s.setActiveTool);
   const pushHistory = useDesignStore((s) => s.pushHistory);
   const undo = useDesignStore((s) => s.undo);
-  const redo = useDesignStore((s) => s.redo);
 
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -2916,19 +2915,9 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
 
       const mod = e.ctrlKey || e.metaKey;
 
-      if (mod && e.key.toLowerCase() === "z") {
-        e.preventDefault();
-        if (e.shiftKey) redo();
-        else undo();
-        render();
-        return;
-      }
-      if (mod && e.key.toLowerCase() === "y") {
-        e.preventDefault();
-        redo();
-        render();
-        return;
-      }
+      // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y are handled globally in Viewport.tsx so
+      // they also work in the 3D and walkthrough views, not just this canvas
+
       if (mod && e.key.toLowerCase() === "a") {
         e.preventDefault();
         const allIds = [
@@ -3177,7 +3166,6 @@ export function Canvas2D({ readOnly = false }: { readOnly?: boolean } = {}) {
     setPendingFurniture,
     pushHistory,
     undo,
-    redo,
   ]);
 
   function commitWallLengthEdit() {

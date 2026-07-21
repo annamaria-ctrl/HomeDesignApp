@@ -16,8 +16,34 @@ import { PropertiesPanel } from "../viewport/PropertiesPanel";
 export function Viewport({ readOnly = false }: { readOnly?: boolean } = {}) {
   const viewMode = useDesignStore((s) => s.viewMode);
   const setViewMode = useDesignStore((s) => s.setViewMode);
+  const undo = useDesignStore((s) => s.undo);
+  const redo = useDesignStore((s) => s.redo);
   const isMobile = useIsMobileViewport();
   const hasSetMobileDefaultRef = useRef(false);
+
+  // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y here (rather than inside Canvas2D) so the
+  // shortcut also works while looking at the 3D or walkthrough view, not
+  // just the 2D editor
+  useEffect(() => {
+    if (readOnly) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if (key === "y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [readOnly, undo, redo]);
 
   // 3D's orbit already has touch support (drei's OrbitControls touches prop);
   // 2D's pan/zoom is mouse/wheel-only, so it's a much rougher first

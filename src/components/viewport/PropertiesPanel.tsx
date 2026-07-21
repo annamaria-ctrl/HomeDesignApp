@@ -14,6 +14,8 @@ import {
   RotateCw,
   Upload,
   Trash2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { useDesignStore } from "../../store/useDesignStore";
 import { fitOpeningOnWall } from "../../lib/openingGeometry";
@@ -199,6 +201,7 @@ export function PropertiesPanel() {
     return unique;
   }, [roomFloors, selectedRoomKey]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [collapsed, setCollapsed] = useState(false);
 
   if (
     selectedWalls.length === 0 &&
@@ -222,6 +225,27 @@ export function PropertiesPanel() {
   // would just be dead weight, and "Height" reads more sensibly relabeled as "Length"
   const selectedAllCeilingHung = selectedFurniture.length > 0 && selectedFurniture.every((f) => isCeilingHung(f.libraryId));
   const furnitureColor = selectedFurniture.length > 0 ? selectedFurniture[0].color : "#8b7355";
+  // a short label for the collapsed header bar — same naming each section already uses below
+  const panelTitle =
+    selectedFurniture.length > 0
+      ? selectedFurniture.length > 1
+        ? `Furniture (${selectedFurniture.length})`
+        : selectedFurniture[0].label
+      : selectedWalls.length > 0
+        ? selectedWalls.length > 1
+          ? `Walls (${selectedWalls.length})`
+          : "Wall"
+        : selectedOpenings.length > 0
+          ? selectedOpenings.length > 1
+            ? `Openings (${selectedOpenings.length})`
+            : selectedOpenings[0].type === "door"
+              ? "Door"
+              : "Window"
+          : selectedRoom
+            ? `Floor (${selectedRoom.area.toFixed(1)} m²)`
+            : selectedMeasurements.length > 1
+              ? `Measurements (${selectedMeasurements.length})`
+              : "Measurement";
 
   function resolveGeometryChange(
     item: FurnitureItem,
@@ -352,7 +376,20 @@ export function PropertiesPanel() {
   }
 
   return (
-    <div className="pointer-events-auto border-studio-line bg-studio-paper/90 text-studio-ink-soft absolute right-4 top-4 z-10 flex w-56 flex-col gap-3 rounded-xl border px-4 py-3.5 text-xs shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_20px_36px_-18px_rgba(43,36,28,0.4)] backdrop-blur-xl">
+    <div className="pointer-events-auto border-studio-line bg-studio-paper/90 text-studio-ink-soft absolute right-4 top-4 z-10 flex w-56 flex-col rounded-xl border text-xs shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_20px_36px_-18px_rgba(43,36,28,0.4)] backdrop-blur-xl">
+      <div className={`flex items-center justify-between gap-2 px-4 py-2.5 ${collapsed ? "" : "border-studio-line border-b"}`}>
+        <span className="text-studio-ink-soft truncate text-[10.5px] font-semibold uppercase tracking-wider">{panelTitle}</span>
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          title={collapsed ? "Expand panel" : "Minimize panel"}
+          className="text-studio-ink-soft hover:bg-studio-ink/[0.06] hover:text-studio-ink shrink-0 rounded-md p-1 transition-colors"
+        >
+          {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+        </button>
+      </div>
+      {!collapsed && (
+      <div className="flex w-full flex-col gap-3 px-4 py-3.5">
       {alignableCount >= 2 && (
         <div className="border-studio-line flex flex-col gap-2 border-b pb-3">
           <div className="text-studio-ink-soft text-[10.5px] font-semibold uppercase tracking-wider">
@@ -648,6 +685,8 @@ export function PropertiesPanel() {
             </button>
           )}
         </div>
+      )}
+      </div>
       )}
     </div>
   );
