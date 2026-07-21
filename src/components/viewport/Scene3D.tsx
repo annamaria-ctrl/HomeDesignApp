@@ -1720,6 +1720,7 @@ export function Crib({ item, selected }: { item: FurnitureItem; selected: boolea
 export function ModernWardrobe({ item, selected }: { item: FurnitureItem; selected: boolean }) {
   const { width, depth, height, color } = item;
   const bodyColor = selected ? WALL_COLOR_SELECTED : color;
+  const grooveColor = useMemo(() => new THREE.Color(bodyColor).multiplyScalar(0.55), [bodyColor]);
   const plinthH = Math.min(0.08, height * 0.06);
   const corniceH = Math.min(0.04, height * 0.04);
   const doorH = height - plinthH - corniceH;
@@ -1748,23 +1749,32 @@ export function ModernWardrobe({ item, selected }: { item: FurnitureItem; select
         <meshStandardMaterial color={bodyColor} roughness={0.6} />
       </RoundedBox>
       <mesh position={[0, plinthH + doorH / 2, frontZ]} castShadow>
-        <boxGeometry args={[0.008, doorH * 0.94, 0.006]} />
+        <boxGeometry args={[0.01, doorH * 0.96, 0.01]} />
         <meshStandardMaterial color="#1c1c1c" roughness={0.5} />
       </mesh>
+      {/* each door reads as a real shaker-style door from across a room, not just up close:
+          a darker recessed groove frame plus a noticeably proud raised panel inside it, so the
+          light/shadow contrast alone sells the "cabinet door" silhouette regardless of viewing distance */}
       {[-1, 1].map((side) => (
-        <mesh key={side} position={[side * width * 0.24, plinthH + doorH * 0.5, frontZ]} castShadow receiveShadow>
-          <boxGeometry args={[doorPanelW, doorH * 0.86, 0.004]} />
-          <meshStandardMaterial color={bodyColor} roughness={0.65} />
-        </mesh>
+        <group key={side}>
+          <mesh position={[side * width * 0.24, plinthH + doorH * 0.5, frontZ - 0.001]} castShadow receiveShadow>
+            <boxGeometry args={[doorPanelW * 0.9, doorH * 0.82, 0.006]} />
+            <meshStandardMaterial color={grooveColor} roughness={0.75} />
+          </mesh>
+          <mesh position={[side * width * 0.24, plinthH + doorH * 0.5, frontZ + 0.008]} castShadow receiveShadow>
+            <boxGeometry args={[doorPanelW * 0.72, doorH * 0.64, 0.02]} />
+            <meshStandardMaterial color={bodyColor} roughness={0.6} />
+          </mesh>
+        </group>
       ))}
       {isClothesWardrobe && (
-        <mesh position={[-width * 0.24, plinthH + doorH * 0.52, frontZ + 0.003]}>
-          <planeGeometry args={[doorPanelW * 0.8, doorH * 0.7]} />
+        <mesh position={[-width * 0.24, plinthH + doorH * 0.52, frontZ + 0.019]}>
+          <planeGeometry args={[doorPanelW * 0.55, doorH * 0.48]} />
           <meshStandardMaterial color="#dfeaee" roughness={0.05} metalness={0.6} />
         </mesh>
       )}
       {[-1, 1].map((side) => (
-        <mesh key={side} position={[side * width * 0.06, handleY, frontZ + 0.015]} castShadow>
+        <mesh key={side} position={[side * width * 0.06, handleY, frontZ + 0.028]} castShadow>
           <cylinderGeometry args={[0.008, 0.008, doorH * 0.16, 8]} />
           <meshStandardMaterial color="#c9a86a" roughness={0.3} metalness={0.6} />
         </mesh>
@@ -1823,20 +1833,23 @@ export function ChestOfDrawers({ item, selected }: { item: FurnitureItem; select
   const bodyColor = selected ? WALL_COLOR_SELECTED : color;
   const drawerCount = height > 1.1 ? 5 : height > 0.6 ? 4 : 2;
   const drawerH = height / drawerCount;
+  const frontZ = depth / 2 + 0.002;
 
   return (
     <group position={[item.position.x, 0, item.position.y]} rotation={[0, -item.rotation, 0]} userData={{ furnitureId: item.id }}>
       <RoundedBox args={[width, height, depth]} radius={0.02} smoothness={2} position={[0, height / 2, 0]} castShadow receiveShadow>
         <meshStandardMaterial color={bodyColor} roughness={0.7} />
       </RoundedBox>
-      {Array.from({ length: drawerCount - 1 }, (_, i) => (
-        <mesh key={i} position={[0, (i + 1) * drawerH, depth / 2 + 0.002]} castShadow>
-          <boxGeometry args={[width * 0.92, 0.006, 0.006]} />
-          <meshStandardMaterial color="#2a2a2a" roughness={0.5} />
+      {/* each drawer front is its own proud raised slab with a real gap (not just a scored
+          line) above and below it, so the stack of drawers reads clearly even from a distance */}
+      {Array.from({ length: drawerCount }, (_, i) => (
+        <mesh key={i} position={[0, i * drawerH + drawerH / 2, frontZ + 0.008]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.9, drawerH * 0.82, 0.018]} />
+          <meshStandardMaterial color={bodyColor} roughness={0.6} />
         </mesh>
       ))}
       {Array.from({ length: drawerCount }, (_, i) => (
-        <mesh key={`h${i}`} position={[0, i * drawerH + drawerH / 2, depth / 2 + 0.02]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <mesh key={`h${i}`} position={[0, i * drawerH + drawerH / 2, frontZ + 0.032]} rotation={[0, 0, Math.PI / 2]} castShadow>
           <cylinderGeometry args={[0.008, 0.008, width * 0.18, 8]} />
           <meshStandardMaterial color="#c9a86a" roughness={0.3} metalness={0.6} />
         </mesh>
@@ -2114,20 +2127,37 @@ export function ToyShelf({ item, selected }: { item: FurnitureItem; selected: bo
 export function Hutch({ item, selected }: { item: FurnitureItem; selected: boolean }) {
   const { width, depth, height, color } = item;
   const bodyColor = selected ? WALL_COLOR_SELECTED : color;
+  const grooveColor = useMemo(() => new THREE.Color(bodyColor).multiplyScalar(0.55), [bodyColor]);
   const baseH = height * 0.4;
   const upperH = height - baseH;
+  const baseFrontZ = depth / 2 + 0.002;
+  const doorPanelW = width * 0.4;
 
   return (
     <group position={[item.position.x, 0, item.position.y]} rotation={[0, -item.rotation, 0]} userData={{ furnitureId: item.id }}>
       <RoundedBox args={[width, baseH, depth]} radius={0.02} smoothness={2} position={[0, baseH / 2, 0]} castShadow receiveShadow>
         <meshStandardMaterial color={bodyColor} roughness={0.65} />
       </RoundedBox>
-      <mesh position={[0, baseH / 2, depth / 2 + 0.002]} castShadow>
-        <boxGeometry args={[0.006, baseH * 0.9, 0.006]} />
-        <meshStandardMaterial color="#2a2a2a" roughness={0.5} />
+      <mesh position={[0, baseH / 2, baseFrontZ]} castShadow>
+        <boxGeometry args={[0.01, baseH * 0.92, 0.01]} />
+        <meshStandardMaterial color="#1c1c1c" roughness={0.5} />
       </mesh>
+      {/* two raised-panel base doors, same groove-frame + proud-inset treatment as the wardrobe,
+          so the lower cabinet reads as doors rather than a plain block under the display hutch */}
       {[-1, 1].map((side) => (
-        <mesh key={side} position={[side * width * 0.16, baseH * 0.55, depth / 2 + 0.02]} castShadow>
+        <group key={side}>
+          <mesh position={[side * width * 0.24, baseH * 0.5, baseFrontZ - 0.001]} castShadow receiveShadow>
+            <boxGeometry args={[doorPanelW * 0.9, baseH * 0.78, 0.006]} />
+            <meshStandardMaterial color={grooveColor} roughness={0.75} />
+          </mesh>
+          <mesh position={[side * width * 0.24, baseH * 0.5, baseFrontZ + 0.008]} castShadow receiveShadow>
+            <boxGeometry args={[doorPanelW * 0.72, baseH * 0.6, 0.02]} />
+            <meshStandardMaterial color={bodyColor} roughness={0.6} />
+          </mesh>
+        </group>
+      ))}
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[side * width * 0.16, baseH * 0.55, baseFrontZ + 0.028]} castShadow>
           <cylinderGeometry args={[0.008, 0.008, baseH * 0.16, 8]} />
           <meshStandardMaterial color="#c9a86a" roughness={0.3} metalness={0.6} />
         </mesh>
